@@ -8,13 +8,14 @@
   import AssetViewerEvents from '$lib/components/AssetViewerEvents.svelte';
   import { assetViewerManager } from '$lib/managers/asset-viewer-manager.svelte';
   import { castManager } from '$lib/managers/cast-manager.svelte';
+  import { eventManager } from '$lib/managers/event-manager.svelte';
   import { isFaceEditMode } from '$lib/stores/face-edit.svelte';
   import { ocrManager } from '$lib/stores/ocr.svelte';
   import { boundingBoxesArray, type Faces } from '$lib/stores/people.store';
   import { SlideshowLook, SlideshowState, slideshowStore } from '$lib/stores/slideshow.store';
   import { handlePromiseError } from '$lib/utils';
   import { canCopyImageToClipboard, copyImageToClipboard } from '$lib/utils/asset-utils';
-  import { getNaturalSize, scaleToFit, type Size } from '$lib/utils/container-utils';
+  import { scaleToCover, scaleToFit, type Size } from '$lib/utils/container-utils';
   import { handleError } from '$lib/utils/handle-error';
   import { getOcrBoundingBoxes } from '$lib/utils/ocr-utils';
   import { getBoundingBox } from '$lib/utils/people-utils';
@@ -29,14 +30,26 @@
     cursor: AssetCursor;
     element?: HTMLDivElement;
     sharedLink?: SharedLinkResponseDto;
-    onReady?: () => void;
+    transitionName?: string;
+    letterboxTransitionName?: string;
     onError?: () => void;
     onSwipe?: (event: SwipeCustomEvent) => void;
   }
 
-  let { cursor, element = $bindable(), sharedLink, onReady, onError, onSwipe }: Props = $props();
+  let {
+    cursor,
+    element = $bindable(),
+    sharedLink,
+    transitionName,
+    letterboxTransitionName,
+    onError,
+    onSwipe,
+  }: Props = $props();
 
   const { slideshowState, slideshowLook } = slideshowStore;
+  const objectFit = $derived(
+    $slideshowState !== SlideshowState.None && $slideshowLook === SlideshowLook.Cover ? 'cover' : 'contain',
+  );
   const asset = $derived(cursor.current);
 
   let visibleImageReady: boolean = $state(false);
@@ -68,11 +81,14 @@
   });
 
   const overlaySize = $derived.by((): Size => {
-    if (!assetViewerManager.imgRef || !visibleImageReady) {
+    if (!visibleImageReady) {
       return { width: 0, height: 0 };
     }
 
-    return scaleToFit(getNaturalSize(assetViewerManager.imgRef), { width: containerWidth, height: containerHeight });
+    const assetWidth = asset.width && asset.width > 0 ? asset.width : 1;
+    const assetHeight = asset.height && asset.height > 0 ? asset.height : 1;
+    const scaleFn = objectFit === 'cover' ? scaleToCover : scaleToFit;
+    return scaleFn({ width: assetWidth, height: assetHeight }, { width: containerWidth, height: containerHeight });
   });
 
   const ocrBoxes = $derived(ocrManager.showOverlay ? getOcrBoundingBoxes(ocrManager.data, overlaySize) : []);
@@ -186,18 +202,21 @@
     {asset}
     {sharedLink}
     {container}
-    objectFit={$slideshowState !== SlideshowState.None && $slideshowLook === SlideshowLook.Cover ? 'cover' : 'contain'}
+    {objectFit}
     {onUrlChange}
     onImageReady={() => {
       visibleImageReady = true;
-      onReady?.();
+      eventManager.emit('TransitionToAssetViewerReady');
     }}
     onError={() => {
       onError?.();
-      onReady?.();
+      eventManager.emit('TransitionToAssetViewerReady');
     }}
     bind:imgRef={assetViewerManager.imgRef}
     bind:ref={adaptiveImage}
+    {transitionName}
+    {letterboxTransitionName}
+    showLetterboxes={!blurredSlideshow}
   >
     {#snippet backdrop()}
       {#if blurredSlideshow}

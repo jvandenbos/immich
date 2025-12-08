@@ -16,7 +16,7 @@
   import { t } from 'svelte-i18n';
 
   interface Props {
-    htmlElement: HTMLImageElement | HTMLVideoElement;
+    htmlElement: HTMLImageElement | HTMLVideoElement | undefined | null;
     containerWidth: number;
     containerHeight: number;
     assetId: string;
@@ -130,9 +130,12 @@
     };
   });
 
-  const imageContentMetrics = $derived(
-    computeContentMetrics(getNaturalSize(htmlElement), { width: containerWidth, height: containerHeight }),
-  );
+  const imageContentMetrics = $derived.by(() => {
+    if (!htmlElement) {
+      return { contentWidth: 0, contentHeight: 0, offsetX: 0, offsetY: 0 };
+    }
+    return computeContentMetrics(getNaturalSize(htmlElement), { width: containerWidth, height: containerHeight });
+  });
 
   const setDefaultFaceRectanglePosition = (faceRect: Rect) => {
     const { offsetX, offsetY, contentWidth, contentHeight } = imageContentMetrics;
@@ -391,7 +394,7 @@
   <div
     id="face-selector"
     bind:this={faceSelectorEl}
-    class="fixed w-[min(200px,45vw)] min-w-48 bg-white dark:bg-immich-dark-gray dark:text-immich-dark-fg backdrop-blur-sm px-2 py-4 rounded-xl border border-gray-200 dark:border-gray-800 transition-[top,left] duration-200 ease-out"
+    class="fixed z-20 w-[min(200px,45vw)] min-w-48 bg-white dark:bg-immich-dark-gray dark:text-immich-dark-fg backdrop-blur-sm px-2 py-4 rounded-xl border border-gray-200 dark:border-gray-800 transition-[top,left] duration-200 ease-out"
     use:trapEvents
     onwheel={(e) => e.stopPropagation()}
   >

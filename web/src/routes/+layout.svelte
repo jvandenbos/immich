@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { afterNavigate, beforeNavigate, goto } from '$app/navigation';
+  import { afterNavigate, beforeNavigate, goto, onNavigate } from '$app/navigation';
   import { page } from '$app/state';
   import { shortcut } from '$lib/actions/shortcut';
   import DownloadPanel from '$lib/components/asset-viewer/download-panel.svelte';
@@ -8,6 +8,7 @@
   import NavigationLoadingBar from '$lib/components/shared-components/navigation-loading-bar.svelte';
   import UploadPanel from '$lib/components/shared-components/upload-panel.svelte';
   import VersionAnnouncement from '$lib/components/VersionAnnouncement.svelte';
+  import { appManager } from '$lib/managers/app-manager.svelte';
   import { eventManager } from '$lib/managers/event-manager.svelte';
   import { serverConfigManager } from '$lib/managers/server-config-manager.svelte';
   import { themeManager } from '$lib/managers/theme-manager.svelte';
@@ -77,6 +78,8 @@
 
   let showNavigationLoadingBar = $state(false);
 
+  appManager.isAssetViewer = isAssetViewerRoute(page);
+
   const getMyImmichLink = () => {
     return new URL(page.url.pathname + page.url.search, 'https://my.immich.app');
   };
@@ -102,8 +105,15 @@
     showNavigationLoadingBar = true;
   });
 
-  afterNavigate(() => {
-    showNavigationLoadingBar = false;
+  onNavigate(({ to }) => {
+    appManager.isAssetViewer = isAssetViewerRoute(to);
+  });
+
+  afterNavigate(({ to, complete }) => {
+    appManager.isAssetViewer = isAssetViewerRoute(to);
+    void complete.finally(() => {
+      showNavigationLoadingBar = false;
+    });
   });
 
   const { serverRestarting } = websocketStore;

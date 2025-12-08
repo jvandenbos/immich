@@ -4,13 +4,14 @@
   import { AssetMediaSize, viewAsset, type AssetResponseDto } from '@immich/sdk';
   import { LoadingSpinner } from '@immich/ui';
   import { t } from 'svelte-i18n';
-  import { fade } from 'svelte/transition';
 
   type Props = {
+    transitionName?: string;
+    letterboxTransitionName?: string;
     asset: AssetResponseDto;
   };
 
-  let { asset }: Props = $props();
+  let { transitionName, letterboxTransitionName, asset }: Props = $props();
 
   const assetId = $derived(asset.id);
 
@@ -20,11 +21,16 @@
   };
 </script>
 
-<div transition:fade={{ duration: 150 }} class="flex h-full select-none place-content-center place-items-center">
+<div class="flex h-dvh w-dvw select-none place-content-center place-items-center">
   {#await Promise.all([loadAssetData(assetId), import('./photo-sphere-viewer-adapter.svelte')])}
     <LoadingSpinner />
   {:then [data, { default: PhotoSphereViewer }]}
-    <PhotoSphereViewer panorama={data} originalPanorama={getAssetUrl({ asset, forceOriginal: true })} />
+    <PhotoSphereViewer
+      {transitionName}
+      {letterboxTransitionName}
+      panorama={data}
+      originalPanorama={getAssetUrl({ asset, forceOriginal: true })}
+    />
   {:catch}
     {$t('errors.failed_to_load_asset')}
   {/await}

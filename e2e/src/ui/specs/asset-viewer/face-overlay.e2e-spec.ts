@@ -148,7 +148,7 @@ test.describe('zoom and face editor interaction', () => {
     await page.mouse.move(width / 2, height / 2);
     await page.mouse.wheel(0, -1);
 
-    const imgLocator = page.locator('[data-viewer-content] img[draggable="false"]');
+    const imgLocator = page.locator('[data-viewer-content] img[data-testid="preview"]');
     await expect(async () => {
       const transform = await imgLocator.evaluate((element) => {
         return getComputedStyle(element.closest('[style*="transform"]') ?? element).transform;
@@ -252,7 +252,7 @@ test.describe('face overlay via edit faces side panel', () => {
     await ensureDetailPanelVisible(page);
     await page.getByLabel('Edit people').click();
 
-    const faceThumbnail = page.locator('section div[role="button"]').first();
+    const faceThumbnail = page.getByTestId('face-thumbnail').first();
     await expect(faceThumbnail).toBeVisible();
 
     const activeBorder = page.locator('[data-viewer-content] .border-solid.border-white.border-3');

@@ -1,3 +1,9 @@
+<script module lang="ts">
+  const useSplitNavTransitions =
+    typeof document !== 'undefined' &&
+    getComputedStyle(document.documentElement).getPropertyValue('--immich-split-viewer-nav').trim() === 'enabled';
+</script>
+
 <script lang="ts">
   import { browser } from '$app/environment';
   import { focusTrap } from '$lib/actions/focus-trap';
@@ -13,6 +19,7 @@
   import { authManager } from '$lib/managers/auth-manager.svelte';
   import { editManager, EditToolType } from '$lib/managers/edit/edit-manager.svelte';
   import { eventManager } from '$lib/managers/event-manager.svelte';
+  import { viewTransitionManager } from '$lib/managers/ViewTransitionManager.svelte';
   import { getAssetActions } from '$lib/services/asset.service';
   import { assetViewingStore } from '$lib/stores/asset-viewing.store';
   import { isFaceEditMode } from '$lib/stores/face-edit.svelte';
@@ -27,6 +34,7 @@
   import { InvocationTracker } from '$lib/utils/invocationTracker';
   import { SlideshowHistory } from '$lib/utils/slideshow-history';
   import { toTimelineAsset } from '$lib/utils/timeline-util';
+  import { crossfadeViewerContent, removeCrossfadeOverlay } from '$lib/utils/transition-utils';
   import {
     AssetTypeEnum,
     getAssetInfo,
@@ -40,7 +48,7 @@
   import { onDestroy, onMount, untrack } from 'svelte';
   import type { SwipeCustomEvent } from 'svelte-gestures';
   import { t } from 'svelte-i18n';
-  import { fly } from 'svelte/transition';
+  import { fly, slide } from 'svelte/transition';
   import Thumbnail from '../assets/thumbnail/thumbnail.svelte';
   import ActivityStatus from './activity-status.svelte';
   import ActivityViewer from './activity-viewer.svelte';
@@ -89,13 +97,14 @@
     onRandom,
   }: Props = $props();
 
-  const { setAssetId } = assetViewingStore;
+  const { setAssetId, invisible } = assetViewingStore;
   const {
     restartProgress: restartSlideshowProgress,
     stopProgress: stopSlideshowProgress,
     slideshowNavigation,
     slideshowState,
     slideshowRepeat,
+    slideshowTransition,
   } = slideshowStore;
   const stackThumbnailSize = 60;
   const stackSelectedThumbnailSize = 65;
@@ -108,6 +117,10 @@
   const previousAsset = $derived(cursor.previousAsset);
   let sharedLink = getSharedLink();
   let fullscreenElement = $state<Element>();
+
+  let slideShowPlaying = $derived($slideshowState === SlideshowState.PlaySlideshow);
+  let slideShowAscending = $derived($slideshowNavigation === SlideshowNavigation.AscendingOrder);
+  let slideShowShuffle = $derived($slideshowNavigation === SlideshowNavigation.Shuffle);
 
   let playOriginalVideo = $state($alwaysLoadOriginalVideo);
   let slideshowStartAssetId = $state<string>();
@@ -142,35 +155,40 @@
     }
   };
 
-  const onAssetUpdate = (updatedAsset: AssetResponseDto) => {
-    if (asset.id === updatedAsset.id) {
-      cursor = { ...cursor, current: updatedAsset };
-    }
-  };
+  let transitionName = $state<string | undefined>('hero');
+  let letterboxTransitionName = $state<string | undefined>(undefined);
+  let detailPanelTransitionName = $state<string | undefined>(undefined);
 
+  let unsubscribes: (() => void)[] = [];
   onMount(() => {
     syncAssetViewerOpenClass(true);
-    const slideshowStateUnsubscribe = slideshowState.subscribe((value) => {
-      if (value === SlideshowState.PlaySlideshow) {
-        slideshowHistory.reset();
-        slideshowHistory.queue(toTimelineAsset(asset));
-        handlePromiseError(handlePlaySlideshow());
-      } else if (value === SlideshowState.StopSlideshow) {
-        handlePromiseError(handleStopSlideshow());
-      }
-    });
 
-    const slideshowNavigationUnsubscribe = slideshowNavigation.subscribe((value) => {
-      if (value === SlideshowNavigation.Shuffle) {
-        slideshowHistory.reset();
-        slideshowHistory.queue(toTimelineAsset(asset));
-      }
-    });
-
-    return () => {
-      slideshowStateUnsubscribe();
-      slideshowNavigationUnsubscribe();
+    const addInfoTransition = () => {
+      detailPanelTransitionName = 'info';
+      transitionName = 'hero';
     };
+
+    unsubscribes.push(
+      eventManager.on({
+        TransitionToAssetViewer: addInfoTransition,
+        TransitionToTimeline: addInfoTransition,
+      }),
+      slideshowState.subscribe((value) => {
+        if (value === SlideshowState.PlaySlideshow) {
+          slideshowHistory.reset();
+          slideshowHistory.queue(toTimelineAsset(asset));
+          handlePromiseError(handlePlaySlideshow());
+        } else if (value === SlideshowState.StopSlideshow) {
+          handlePromiseError(handleStopSlideshow());
+        }
+      }),
+      slideshowNavigation.subscribe((value) => {
+        if (value === SlideshowNavigation.Shuffle) {
+          slideshowHistory.reset();
+          slideshowHistory.queue(toTimelineAsset(asset));
+        }
+      }),
+    );
   });
 
   onDestroy(() => {
@@ -179,10 +197,16 @@
     isFaceEditMode.value = false;
     syncAssetViewerOpenClass(false);
     preloadManager.destroy();
+
+    for (const unsubscribe of unsubscribes) {
+      unsubscribe();
+    }
   });
 
   const closeViewer = () => {
-    onClose?.(asset);
+    transitionName = 'hero';
+    const id = stack?.primaryAssetId ?? asset.id;
+    onClose?.({ ...asset, id });
   };
 
   const closeEditor = async () => {
@@ -194,64 +218,125 @@
     assetViewerManager.closeEditor();
   };
 
+  const getTransitionName = (kind: 'old' | 'new', direction: string | null | undefined) => {
+    if (direction === 'previous' || direction === 'next') {
+      return useSplitNavTransitions ? `${direction}-${kind}` : direction;
+    }
+    return direction ?? undefined;
+  };
+
+  const clearTransitionNames = () => {
+    detailPanelTransitionName = undefined;
+    transitionName = undefined;
+    letterboxTransitionName = undefined;
+  };
+
+  const startTransition = async (
+    types: string[],
+    targetTransition: string | null,
+    navigateFn: () => Promise<boolean>,
+  ) => {
+    const oldName = getTransitionName('old', targetTransition);
+    const newName = getTransitionName('new', targetTransition);
+
+    let result = false;
+
+    await viewTransitionManager.startTransition({
+      types,
+      prepareOldSnapshot: () => {
+        transitionName = oldName;
+        letterboxTransitionName = targetTransition ? `${targetTransition}-old` : undefined;
+        detailPanelTransitionName = 'detail-panel';
+      },
+      performUpdate: async () => {
+        result = await navigateFn();
+        await eventManager.untilNext('TransitionToAssetViewerReady');
+      },
+      prepareNewSnapshot: () => {
+        transitionName = newName;
+        letterboxTransitionName = targetTransition ? `${targetTransition}-new` : undefined;
+      },
+      onFinished: clearTransitionNames,
+    });
+
+    return result;
+  };
+
+  const completeNavigation = async (order: 'previous' | 'next', skipTransition: boolean) => {
+    preloadManager.cancelBeforeNavigation(order);
+    const skipped = viewTransitionManager.skipTransitions();
+    const canTransition = viewTransitionManager.isSupported() && !skipped && !skipTransition;
+
+    let navigate: () => Promise<boolean>;
+    let types: string[];
+    let targetTransition: string | null;
+
+    if (slideShowPlaying && slideShowShuffle) {
+      navigate = async () => {
+        let next = order === 'previous' ? slideshowHistory.previous() : slideshowHistory.next();
+        if (!next) {
+          const asset = await onRandom?.();
+          if (asset) {
+            slideshowHistory.queue(asset);
+            next = true;
+          }
+        }
+        return next;
+      };
+      types = ['slideshow'];
+      targetTransition = null;
+    } else {
+      navigate = async () => {
+        const target = order === 'previous' ? previousAsset : nextAsset;
+        return navigateToAsset(target);
+      };
+      types = slideShowPlaying ? ['slideshow'] : ['viewer-nav'];
+      targetTransition = slideShowPlaying ? null : order;
+    }
+
+    const targetAsset = order === 'previous' ? previousAsset : nextAsset;
+    const slideshowAllowsTransition = !slideShowPlaying || $slideshowTransition;
+    const useTransition = canTransition && slideshowAllowsTransition && (slideShowShuffle || !!targetAsset);
+    const hasNext = useTransition ? await startTransition(types, targetTransition, navigate) : await navigate();
+
+    if (!slideShowPlaying) {
+      return;
+    }
+
+    if (hasNext) {
+      $restartSlideshowProgress = true;
+      return;
+    }
+
+    if ($slideshowRepeat && slideshowStartAssetId) {
+      await setAssetId(slideshowStartAssetId);
+      $restartSlideshowProgress = true;
+      return;
+    }
+
+    await handleStopSlideshow();
+  };
+
   const tracker = new InvocationTracker();
-  const navigateAsset = (order?: 'previous' | 'next') => {
+  const navigateAsset = (order?: 'previous' | 'next', skipTransition: boolean = false) => {
     if (!order) {
-      if ($slideshowState === SlideshowState.PlaySlideshow) {
-        order = $slideshowNavigation === SlideshowNavigation.AscendingOrder ? 'previous' : 'next';
+      if (slideShowPlaying) {
+        order = slideShowAscending ? 'previous' : 'next';
       } else {
         return;
       }
     }
-
-    preloadManager.cancelBeforeNavigation(order);
 
     if (tracker.isActive()) {
       return;
     }
 
-    void tracker.invoke(async () => {
-      const isShuffle =
-        $slideshowState === SlideshowState.PlaySlideshow && $slideshowNavigation === SlideshowNavigation.Shuffle;
-
-      let hasNext: boolean;
-
-      if (isShuffle) {
-        hasNext = order === 'previous' ? slideshowHistory.previous() : slideshowHistory.next();
-        if (!hasNext) {
-          const asset = await onRandom?.();
-          if (asset) {
-            slideshowHistory.queue(asset);
-            hasNext = true;
-          }
-        }
-      } else {
-        hasNext =
-          order === 'previous' ? await navigateToAsset(cursor.previousAsset) : await navigateToAsset(cursor.nextAsset);
-      }
-
-      if ($slideshowState !== SlideshowState.PlaySlideshow) {
-        return;
-      }
-
-      if (hasNext) {
-        $restartSlideshowProgress = true;
-        return;
-      }
-
-      if ($slideshowRepeat && slideshowStartAssetId) {
-        await setAssetId(slideshowStartAssetId);
-        $restartSlideshowProgress = true;
-        return;
-      }
-
-      await handleStopSlideshow();
-    }, $t('error_while_navigating'));
+    void tracker.invoke(
+      () => completeNavigation(order, skipTransition),
+      (error: unknown) => handleError(error, $t('error_while_navigating')),
+      () => eventManager.emit('AssetViewerAfterNavigate'),
+    );
   };
-
-  /**
-   * Slide show mode
-   */
 
   let assetViewerHtmlElement = $state<HTMLElement>();
 
@@ -277,10 +362,11 @@
 
   const handleStopSlideshow = async () => {
     try {
-      if (document.fullscreenElement) {
-        document.body.style.cursor = '';
-        await document.exitFullscreen();
+      if (!document.fullscreenElement) {
+        return;
       }
+      document.body.style.cursor = '';
+      await document.exitFullscreen();
     } catch (error) {
       handleError(error, $t('errors.unable_to_exit_fullscreen'));
     } finally {
@@ -289,8 +375,23 @@
     }
   };
 
-  const handleStackedAssetMouseEvent = (isMouseOver: boolean, stackedAsset: AssetResponseDto) => {
-    previewStackedAsset = isMouseOver ? stackedAsset : undefined;
+  const handleStackedAssetMouseEnter = (stackedAsset: AssetResponseDto) => {
+    if ((previewStackedAsset ?? cursor.current).id === stackedAsset.id) {
+      return;
+    }
+
+    void crossfadeViewerContent(() => {
+      previewStackedAsset = stackedAsset;
+    });
+  };
+
+  const handleStackSlideshowMouseLeave = () => {
+    if (!previewStackedAsset) {
+      return;
+    }
+
+    removeCrossfadeOverlay();
+    previewStackedAsset = undefined;
   };
 
   const handlePreAction = (action: Action) => {
@@ -391,14 +492,23 @@
     if (cursor.current.id === lastCursor?.current.id) {
       return;
     }
+
     if (lastCursor) {
+      previewStackedAsset = undefined;
+      ocrManager.showOverlay = false;
       preloadManager.updateAfterNavigation(lastCursor, cursor, sharedLink);
+      lastCursor = cursor;
+      return;
     }
-    if (!lastCursor) {
-      preloadManager.initializePreloads(cursor, sharedLink);
-    }
+    preloadManager.initializePreloads(cursor, sharedLink);
     lastCursor = cursor;
   });
+
+  const onAssetUpdate = (update: AssetResponseDto) => {
+    if (asset.id === update.id) {
+      cursor = { ...cursor, current: update };
+    }
+  };
 
   const viewerKind = $derived.by(() => {
     if (previewStackedAsset) {
@@ -470,13 +580,16 @@
 
 <section
   id="immich-asset-viewer"
-  class="fixed start-0 top-0 grid size-full grid-cols-4 grid-rows-[64px_1fr] overflow-hidden bg-black touch-none"
+  class="fixed inset-s-0 top-0 z-10 grid size-full grid-cols-4 grid-rows-[64px_1fr] overflow-hidden bg-black touch-none"
+  class:invisible={$invisible}
   use:focusTrap
   bind:this={assetViewerHtmlElement}
 >
-  <!-- Top navigation bar -->
   {#if $slideshowState === SlideshowState.None && !assetViewerManager.isShowEditor}
-    <div class="col-span-4 col-start-1 row-span-1 row-start-1 transition-transform">
+    <div
+      class="col-span-4 col-start-1 row-span-1 row-start-1 transition-transform"
+      style:view-transition-name="exclude"
+    >
       <AssetViewerNavBar
         {asset}
         {album}
@@ -487,7 +600,7 @@
         onAction={handleAction}
         {onUndoDelete}
         onPlaySlideshow={() => ($slideshowState = SlideshowState.PlaySlideshow)}
-        onClose={onClose ? () => onClose(asset) : undefined}
+        onClose={onClose ? closeViewer : undefined}
         {playOriginalVideo}
         {setPlayOriginalVideo}
       />
@@ -508,16 +621,21 @@
   {/if}
 
   {#if $slideshowState === SlideshowState.None && showNavigation && !assetViewerManager.isShowEditor && !isFaceEditMode.value && previousAsset}
-    <div class="my-auto col-span-1 col-start-1 row-span-full row-start-1 justify-self-start">
+    <div
+      data-test-id="previous-asset"
+      class="my-auto col-span-1 col-start-1 row-span-full row-start-1 justify-self-start"
+      style:view-transition-name="exclude-leftbutton"
+    >
       <PreviousAssetAction onPreviousAsset={() => navigateAsset('previous')} />
     </div>
   {/if}
 
-  <!-- Asset Viewer -->
   <div data-viewer-content class="z-[-1] relative col-start-1 col-span-4 row-start-1 row-span-full">
     {#if viewerKind === 'StackVideoViewer'}
       <VideoViewer
+        {transitionName}
         asset={previewStackedAsset!}
+        assetId={previewStackedAsset!.id}
         cacheKey={previewStackedAsset!.thumbhash}
         projectionType={previewStackedAsset!.exifInfo?.projectionType}
         loopVideo={true}
@@ -530,6 +648,7 @@
       />
     {:else if viewerKind === 'LiveVideoViewer'}
       <VideoViewer
+        {transitionName}
         {asset}
         assetId={asset.livePhotoVideoId!}
         cacheKey={asset.thumbhash}
@@ -541,13 +660,20 @@
         {playOriginalVideo}
       />
     {:else if viewerKind === 'ImagePanaramaViewer'}
-      <ImagePanoramaViewer {asset} />
+      <ImagePanoramaViewer {asset} {transitionName} {letterboxTransitionName} />
     {:else if viewerKind === 'CropArea'}
       <CropArea {asset} />
     {:else if viewerKind === 'PhotoViewer'}
-      <PhotoViewer cursor={{ ...cursor, current: asset }} {sharedLink} {onSwipe} />
+      <PhotoViewer
+        {transitionName}
+        {letterboxTransitionName}
+        cursor={{ ...cursor, current: asset }}
+        {sharedLink}
+        {onSwipe}
+      />
     {:else if viewerKind === 'VideoViewer'}
       <VideoViewer
+        {transitionName}
         {asset}
         cacheKey={asset.thumbhash}
         projectionType={asset.exifInfo?.projectionType}
@@ -581,15 +707,20 @@
   </div>
 
   {#if $slideshowState === SlideshowState.None && showNavigation && !assetViewerManager.isShowEditor && !isFaceEditMode.value && nextAsset}
-    <div class="my-auto col-span-1 col-start-4 row-span-full row-start-1 justify-self-end">
+    <div
+      data-test-id="next-asset"
+      class="my-auto col-span-1 col-start-4 row-span-full row-start-1 justify-self-end"
+      style:view-transition-name="exclude-rightbutton"
+    >
       <NextAssetAction onNextAsset={() => navigateAsset('next')} />
     </div>
   {/if}
 
   {#if showDetailPanel || assetViewerManager.isShowEditor}
     <div
-      transition:fly={{ duration: 150 }}
+      transition:slide={{ axis: 'x', duration: 150 }}
       id="detail-panel"
+      style:view-transition-name={detailPanelTransitionName}
       class="row-start-1 row-span-4 overflow-y-auto transition-all dark:border-l dark:border-s-immich-dark-gray bg-light"
       translate="yes"
     >
@@ -605,9 +736,14 @@
     </div>
   {/if}
 
-  {#if stack && withStacked && !assetViewerManager.isShowEditor}
+  {#if stack && withStacked && !assetViewerManager.isShowEditor && $slideshowState === SlideshowState.None}
     {@const stackedAssets = stack.assets}
-    <div id="stack-slideshow" class="absolute bottom-0 w-full col-span-4 col-start-1 pointer-events-none">
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div
+      id="stack-slideshow"
+      class="absolute bottom-0 w-full col-span-4 col-start-1 pointer-events-none"
+      onmouseleave={handleStackSlideshowMouseLeave}
+    >
       <div class="relative flex flex-row no-wrap overflow-x-auto overflow-y-hidden horizontal-scrollbar">
         {#each stackedAssets as stackedAsset (stackedAsset.id)}
           <div
@@ -620,10 +756,11 @@
               dimmed={stackedAsset.id !== asset.id}
               asset={toTimelineAsset(stackedAsset)}
               onClick={() => {
+                removeCrossfadeOverlay();
                 cursor.current = stackedAsset;
                 previewStackedAsset = undefined;
               }}
-              onMouseEvent={({ isMouseOver }) => handleStackedAssetMouseEvent(isMouseOver, stackedAsset)}
+              onMouseEvent={({ isMouseOver }) => isMouseOver && handleStackedAssetMouseEnter(stackedAsset)}
               readonly
               thumbnailSize={stackedAsset.id === asset.id ? stackSelectedThumbnailSize : stackThumbnailSize}
               showStackedIcon={false}

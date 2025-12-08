@@ -3,13 +3,13 @@
   import type { AssetResponseDto } from '@immich/sdk';
   import { LoadingSpinner } from '@immich/ui';
   import { t } from 'svelte-i18n';
-  import { fade } from 'svelte/transition';
 
   interface Props {
+    transitionName?: string;
     asset: AssetResponseDto;
   }
 
-  const { asset }: Props = $props();
+  const { asset, transitionName }: Props = $props();
 
   const modules = Promise.all([
     import('./photo-sphere-viewer-adapter.svelte').then((module) => module.default),
@@ -19,11 +19,12 @@
   ]);
 </script>
 
-<div transition:fade={{ duration: 150 }} class="flex h-full select-none place-content-center place-items-center">
+<div class="flex h-full select-none place-content-center place-items-center">
   {#await modules}
     <LoadingSpinner />
   {:then [PhotoSphereViewer, adapter, videoPlugin]}
     <PhotoSphereViewer
+      {transitionName}
       panorama={{ source: getAssetPlaybackUrl({ id: asset.id }) }}
       originalPanorama={{ source: getAssetUrl({ asset, forceOriginal: true })! }}
       plugins={[videoPlugin]}

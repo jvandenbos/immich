@@ -5,6 +5,7 @@
   import type { AssetResponseDto } from '@immich/sdk';
 
   interface Props {
+    transitionName?: string;
     asset: AssetResponseDto;
     assetId?: string;
     projectionType: string | null | undefined;
@@ -19,6 +20,7 @@
   }
 
   let {
+    transitionName,
     asset,
     assetId,
     projectionType,
@@ -36,9 +38,10 @@
 </script>
 
 {#if projectionType === ProjectionType.EQUIRECTANGULAR}
-  <VideoPanoramaViewer {asset} />
+  <VideoPanoramaViewer {transitionName} {asset} />
 {:else}
   <VideoNativeViewer
+    {transitionName}
     {loopVideo}
     {cacheKey}
     assetId={effectiveAssetId}

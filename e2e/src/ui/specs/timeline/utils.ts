@@ -164,12 +164,8 @@ export const assetViewerUtils = {
   },
   async waitForViewerLoad(page: Page, asset: TimelineAssetConfig) {
     await page
-      .locator(
-        `img[draggable="false"][src="/api/assets/${asset.id}/thumbnail?size=preview&c=${asset.thumbhash}&edited=true"]`,
-      )
-      .or(
-        page.locator(`video[poster="/api/assets/${asset.id}/thumbnail?size=preview&c=${asset.thumbhash}&edited=true"]`),
-      )
+      .locator(`img[data-testid="preview"][src*="${asset.id}"]`)
+      .or(page.locator(`video[poster*="${asset.id}"]`))
       .waitFor();
   },
   async expectActiveAssetToBe(page: Page, assetId: string) {

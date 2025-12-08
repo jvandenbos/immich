@@ -230,6 +230,7 @@
             <div
               role="button"
               tabindex={index}
+              data-testid="face-thumbnail"
               class="absolute start-0 top-0 h-22.5 w-22.5 cursor-default"
               onfocus={() => ($boundingBoxesArray = [peopleWithFaces[index]])}
               onpointerover={() => ($boundingBoxesArray = [peopleWithFaces[index]])}

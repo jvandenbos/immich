@@ -3,8 +3,12 @@
   import { shortcuts, type ShortcutOptions } from '$lib/actions/shortcut';
   import type { Action } from '$lib/components/asset-viewer/actions/action';
   import Thumbnail from '$lib/components/assets/thumbnail/thumbnail.svelte';
+  import { focusAsset } from '$lib/components/timeline/actions/focus-actions';
   import { AssetAction } from '$lib/constants';
   import Portal from '$lib/elements/Portal.svelte';
+  import { viewTransitionManager } from '$lib/managers/ViewTransitionManager.svelte';
+  import { startViewerTransition } from '$lib/utils/transition-utils';
+  import { eventManager } from '$lib/managers/event-manager.svelte';
   import { featureFlagsManager } from '$lib/managers/feature-flags-manager.svelte';
   import type { TimelineAsset, Viewport } from '$lib/managers/timeline-manager/types';
   import AssetDeleteConfirmModal from '$lib/modals/AssetDeleteConfirmModal.svelte';
@@ -30,6 +34,7 @@
   import { AssetVisibility, type AssetResponseDto } from '@immich/sdk';
   import { modalManager } from '@immich/ui';
   import { debounce } from 'lodash-es';
+  import { onMount, tick } from 'svelte';
   import { t } from 'svelte-i18n';
 
   type Props = {
@@ -106,6 +111,36 @@
   };
 
   const updateSlidingWindow = () => (scrollTop = document.scrollingElement?.scrollTop ?? 0);
+
+  const scrollGalleryToAsset = async (assetId: string) => {
+    const index = assets.findIndex((asset) => asset.id === assetId);
+    if (index === -1) {
+      return;
+    }
+    const assetTopPage = geometry.getTop(index) + slidingWindowOffset;
+    const assetBottomPage = assetTopPage + geometry.getHeight(index);
+    const currentScrollTop = document.scrollingElement?.scrollTop ?? 0;
+    const visibleTop = currentScrollTop + pageHeaderOffset;
+    const visibleBottom = currentScrollTop + viewport.height;
+
+    if (assetTopPage >= visibleTop && assetBottomPage <= visibleBottom) {
+      return;
+    }
+    const distanceToAlignTop = Math.abs(assetTopPage - pageHeaderOffset - currentScrollTop);
+    const distanceToAlignBottom = Math.abs(assetBottomPage - viewport.height - currentScrollTop);
+    const newScrollTop =
+      distanceToAlignTop < distanceToAlignBottom ? assetTopPage - pageHeaderOffset : assetBottomPage - viewport.height;
+    if (document.scrollingElement) {
+      document.scrollingElement.scrollTop = newScrollTop;
+    }
+    updateSlidingWindow();
+    await tick();
+  };
+
+  const scrollToAndFocusAsset = async (assetId: string) => {
+    await scrollGalleryToAsset(assetId);
+    focusAsset(assetId);
+  };
 
   const debouncedOnIntersected = debounce(() => onIntersected?.(), 750, { maxWait: 100, leading: true });
 
@@ -356,6 +391,63 @@
     nextAsset: getNextAsset(navigationAssets, $viewingAsset),
     previousAsset: getPreviousAsset(navigationAssets, $viewingAsset),
   });
+
+  let toViewerTransitionId = $state<string | null>(null);
+  let toGalleryTransitionId = $state<string | null>(null);
+  const transitionTargetId = $derived(toViewerTransitionId ?? toGalleryTransitionId);
+
+  const handleThumbnailClick = (asset: AssetResponseDto, currentAsset: TimelineAsset) => {
+    if (assetInteraction.selectionActive) {
+      handleSelectAssets(currentAsset);
+      return;
+    }
+
+    const doNavigate = () => void navigateToAsset(asset);
+
+    if (!viewTransitionManager.isSupported()) {
+      doNavigate();
+      return;
+    }
+
+    startViewerTransition(asset.id, doNavigate, (id) => (toViewerTransitionId = id));
+  };
+
+  const transitionToGalleryCallback = ({ id }: { id: string }) => {
+    void viewTransitionManager.startTransition({
+      types: ['timeline'],
+      prepareOldSnapshot: () => {
+        void scrollGalleryToAsset(id);
+      },
+      performUpdate: async () => {
+        eventManager.emit('TransitionToTimelineReady');
+        toGalleryTransitionId = id;
+        await tick();
+      },
+      onFinished: () => {
+        toGalleryTransitionId = null;
+        focusAsset(id);
+      },
+    });
+  };
+
+  if (viewTransitionManager.isSupported()) {
+    onMount(() => eventManager.on({ TransitionToTimeline: transitionToGalleryCallback }));
+  }
+
+  const handleClose = async (asset: { id: string }) => {
+    const useTransition = viewTransitionManager.isSupported();
+    if (useTransition) {
+      const transitionReady = eventManager.untilNext('TransitionToTimelineReady');
+      eventManager.emit('TransitionToTimeline', { id: asset.id });
+      await transitionReady;
+    }
+    assetViewingStore.showAssetViewer(false);
+    if (!useTransition) {
+      await tick();
+      await scrollToAndFocusAsset(asset.id);
+    }
+    handlePromiseError(navigate({ targetRoute: 'current', assetId: null }, { noScroll: true }));
+  };
 </script>
 
 <svelte:document
@@ -375,16 +467,17 @@
     {#each assets as asset, i (asset.id + '-' + i)}
       {#if isIntersecting(i)}
         {@const currentAsset = toTimelineAsset(asset)}
-        <div class="absolute" style:overflow="clip" style={getStyle(i)}>
+        {@const transitionName = transitionTargetId === asset.id ? 'hero' : undefined}
+        <div
+          class="absolute"
+          style:overflow="clip"
+          style={getStyle(i)}
+          style:view-transition-name={transitionName}
+          data-transition-name={transitionName}
+        >
           <Thumbnail
             readonly={disableAssetSelect}
-            onClick={() => {
-              if (assetInteraction.selectionActive) {
-                handleSelectAssets(currentAsset);
-                return;
-              }
-              void navigateToAsset(asset);
-            }}
+            onClick={() => handleThumbnailClick(asset, currentAsset)}
             onSelect={() => handleSelectAssets(currentAsset)}
             onMouseEvent={() => assetMouseEventHandler(currentAsset)}
             {showArchiveIcon}
@@ -416,10 +509,7 @@
         onAction={handleAction}
         onRandom={handleRandom}
         onAssetChange={updateCurrentAsset}
-        onClose={() => {
-          assetViewingStore.showAssetViewer(false);
-          handlePromiseError(navigate({ targetRoute: 'current', assetId: null }));
-        }}
+        onClose={(asset) => handleClose(asset)}
       />
     {/await}
   </Portal>

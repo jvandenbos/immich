@@ -1,6 +1,7 @@
 <script lang="ts">
   import { thumbhash } from '$lib/actions/thumbhash';
   import AlphaBackground from '$lib/components/AlphaBackground.svelte';
+  import Letterboxes from '$lib/components/asset-viewer/letterboxes.svelte';
   import BrokenAsset from '$lib/components/assets/broken-asset.svelte';
   import DelayedLoadingSpinner from '$lib/components/DelayedLoadingSpinner.svelte';
   import ImageLayer from '$lib/components/ImageLayer.svelte';
@@ -18,6 +19,10 @@
     sharedLink?: SharedLinkResponseDto;
     objectFit?: 'contain' | 'cover';
     container: Size;
+    showLetterboxes?: boolean;
+    transitionName?: string | null | undefined;
+    letterboxTransitionName?: string | undefined;
+    imageClass?: string;
     onUrlChange?: (url: string) => void;
     onImageReady?: () => void;
     onError?: () => void;
@@ -35,6 +40,10 @@
     sharedLink,
     objectFit = 'contain',
     container,
+    showLetterboxes = true,
+    transitionName,
+    letterboxTransitionName,
+    imageClass,
     onUrlChange,
     onImageReady,
     onError,
@@ -98,9 +107,13 @@
     return { width: 1, height: 1 };
   });
 
-  const { width, height, left, top } = $derived.by(() => {
+  const scaledDimensions = $derived.by(() => {
     const scaleFn = objectFit === 'cover' ? scaleToCover : scaleToFit;
-    const { width, height } = scaleFn(imageDimensions, container);
+    return scaleFn(imageDimensions, container);
+  });
+
+  const { width, height, left, top } = $derived.by(() => {
+    const { width, height } = scaledDimensions;
     return {
       width: width + 'px',
       height: height + 'px',
@@ -151,7 +164,17 @@
 <div class="relative h-full w-full overflow-hidden will-change-transform" bind:this={ref}>
   {@render backdrop?.()}
 
-  <div class="absolute inset-0 pointer-events-none" style:left style:top style:width style:height>
+  <Letterboxes {letterboxTransitionName} show={showLetterboxes} {scaledDimensions} {container} />
+
+  <div
+    class={['absolute inset-0 pointer-events-none', imageClass]}
+    style:left
+    style:top
+    style:width
+    style:height
+    style:view-transition-name={transitionName}
+    data-transition-name={transitionName}
+  >
     {#if show.alphaBackground}
       <AlphaBackground />
     {/if}

@@ -43,6 +43,36 @@ export class BaseEventManager<Events extends EventsBase> {
     };
   }
 
+  once<T extends keyof Events>(event: T, callback: EventCallback<Events, T>) {
+    const unsubscribe = this.#onEvent(event, (...args: Events[T]) => {
+      unsubscribe();
+      return callback(...args);
+    });
+    return unsubscribe;
+  }
+
+  untilNext<T extends keyof Events>(
+    event: T,
+    timeoutMs: number = 10_000,
+  ): Promise<Events[T] extends [] ? void : Events[T][0]> {
+    type Result = Events[T] extends [] ? void : Events[T][0];
+    return new Promise<Result>((resolve, reject) => {
+      let settled = false;
+      const unsubscribe = this.once(event, (...args: Events[T]) => {
+        settled = true;
+        clearTimeout(timer);
+        resolve(args[0] as Result);
+      });
+      const timer = setTimeout(() => {
+        if (!settled) {
+          settled = true;
+          unsubscribe();
+          reject(new Error(`untilNext('${String(event)}') timed out after ${timeoutMs}ms`));
+        }
+      }, timeoutMs);
+    });
+  }
+
   emit<T extends keyof Events>(event: T, ...params: Events[T]) {
     const listeners = this.getListeners(event);
     for (const listener of listeners) {

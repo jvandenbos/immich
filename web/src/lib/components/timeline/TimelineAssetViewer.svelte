@@ -4,6 +4,8 @@
   import { AssetAction } from '$lib/constants';
   import { assetCacheManager } from '$lib/managers/AssetCacheManager.svelte';
   import { authManager } from '$lib/managers/auth-manager.svelte';
+  import { eventManager } from '$lib/managers/event-manager.svelte';
+  import { viewTransitionManager } from '$lib/managers/ViewTransitionManager.svelte';
   import { TimelineManager } from '$lib/managers/timeline-manager/timeline-manager.svelte';
   import type { TimelineAsset } from '$lib/managers/timeline-manager/types';
   import { assetViewingStore } from '$lib/stores/asset-viewing.store';
@@ -98,6 +100,12 @@
   };
 
   const handleClose = async (asset: { id: string }) => {
+    if (viewTransitionManager.isSupported()) {
+      const transitionReady = eventManager.untilNext('TransitionToTimelineReady');
+      eventManager.emit('TransitionToTimeline', { id: asset.id });
+      await transitionReady;
+    }
+
     invisible = true;
     $gridScrollTarget = { at: asset.id };
     await navigate({ targetRoute: 'current', assetId: null, assetGridRouteSearchParams: $gridScrollTarget });

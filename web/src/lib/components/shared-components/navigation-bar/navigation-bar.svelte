@@ -50,7 +50,11 @@
 
 <svelte:window bind:innerWidth />
 
-<nav id="dashboard-navbar" class="max-md:h-(--navbar-height-md) h-(--navbar-height) w-dvw text-sm">
+<nav
+  id="dashboard-navbar"
+  class="max-md:h-(--navbar-height-md) h-(--navbar-height) w-dvw text-sm relative z-10"
+  style:view-transition-name="exclude"
+>
   <SkipLink text={$t('skip_to_content')} />
   <div
     class="grid h-full grid-cols-[--spacing(32)_auto] items-center py-2 sidebar:grid-cols-[--spacing(64)_auto] {noBorder

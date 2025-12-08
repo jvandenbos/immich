@@ -19,76 +19,83 @@ import type {
 } from '@immich/sdk';
 
 export type Events = {
+  AlbumAddAssets: [{ assetIds: string[]; albumIds: string[] }];
+  AlbumCreate: [AlbumResponseDto];
+  AlbumDelete: [AlbumResponseDto];
+  AlbumShare: [];
+  AlbumUpdate: [AlbumResponseDto];
+  AlbumUserDelete: [{ albumId: string; userId: string }];
+  AlbumUserUpdate: [{ albumId: string; userId: string; role: AlbumUserRole }];
+
+  ApiKeyCreate: [ApiKeyResponseDto];
+  ApiKeyDelete: [ApiKeyResponseDto];
+  ApiKeyUpdate: [ApiKeyResponseDto];
+
   AppInit: [];
+
+  AssetEditsApplied: [string];
+  AssetUpdate: [AssetResponseDto];
+  AssetViewerAfterNavigate: [];
+  AssetsArchive: [string[]];
+  AssetsDelete: [string[]];
+  AssetsTag: [string[]];
 
   AuthLogin: [LoginResponseDto];
   AuthLogout: [];
   AuthUserLoaded: [UserAdminResponseDto];
 
-  LanguageChange: [{ name: string; code: string; rtl?: boolean }];
-  ThemeChange: [ThemeSetting];
-
-  ApiKeyCreate: [ApiKeyResponseDto];
-  ApiKeyUpdate: [ApiKeyResponseDto];
-  ApiKeyDelete: [ApiKeyResponseDto];
-
-  AssetUpdate: [AssetResponseDto];
-  AssetsArchive: [string[]];
-  AssetsDelete: [string[]];
-  AssetEditsApplied: [string];
-  AssetsTag: [string[]];
-
-  AlbumAddAssets: [{ assetIds: string[]; albumIds: string[] }];
-  AlbumCreate: [AlbumResponseDto];
-  AlbumUpdate: [AlbumResponseDto];
-  AlbumDelete: [AlbumResponseDto];
-  AlbumShare: [];
-  AlbumUserUpdate: [{ albumId: string; userId: string; role: AlbumUserRole }];
-  AlbumUserDelete: [{ albumId: string; userId: string }];
-
-  PersonUpdate: [PersonResponseDto];
-  PersonThumbnailReady: [{ id: string }];
-  PersonAssetDelete: [{ id: string; assetId: string }];
-
   BackupDeleteStatus: [{ filename: string; isDeleting: boolean }];
   BackupDeleted: [{ filename: string }];
   BackupUpload: [{ progress: number; isComplete: boolean }];
 
+  LanguageChange: [{ name: string; code: string; rtl?: boolean }];
+
+  LibraryCreate: [LibraryResponseDto];
+  LibraryDelete: [{ id: string }];
+  LibraryUpdate: [LibraryResponseDto];
+
+  PersonAssetDelete: [{ id: string; assetId: string }];
+  PersonThumbnailReady: [{ id: string }];
+  PersonUpdate: [PersonResponseDto];
+
   QueueUpdate: [QueueResponseDto];
 
+  ReleaseEvent: [ReleaseEvent];
+
+  SessionLocked: [];
+
   SharedLinkCreate: [SharedLinkResponseDto];
-  SharedLinkUpdate: [SharedLinkResponseDto];
   SharedLinkDelete: [SharedLinkResponseDto];
+  SharedLinkUpdate: [SharedLinkResponseDto];
+
+  SystemConfigUpdate: [SystemConfigDto];
 
   TagCreate: [TagResponseDto];
-  TagUpdate: [TagResponseDto];
   TagDelete: [TreeNode];
+  TagUpdate: [TagResponseDto];
 
-  UserPinCodeReset: [];
+  ThemeChange: [ThemeSetting];
+
+  TimelineLoaded: [{ id: string | null }];
+  TransitionToAssetViewer: [];
+  TransitionToAssetViewerReady: [];
+  TransitionToTimeline: [{ id: string }];
+  TransitionToTimelineReady: [];
 
   UserAdminCreate: [UserAdminResponseDto];
-  UserAdminUpdate: [UserAdminResponseDto];
-  UserAdminRestore: [UserAdminResponseDto];
   // soft deleted
   UserAdminDelete: [UserAdminResponseDto];
   // confirmed permanently deleted from server
   UserAdminDeleted: [{ id: string }];
-
-  SessionLocked: [];
-
-  SystemConfigUpdate: [SystemConfigDto];
-
-  LibraryCreate: [LibraryResponseDto];
-  LibraryUpdate: [LibraryResponseDto];
-  LibraryDelete: [{ id: string }];
-
-  WorkflowCreate: [WorkflowResponseDto];
-  WorkflowUpdate: [WorkflowResponseDto];
-  WorkflowDelete: [WorkflowResponseDto];
-
-  ReleaseEvent: [ReleaseEvent];
+  UserAdminRestore: [UserAdminResponseDto];
+  UserAdminUpdate: [UserAdminResponseDto];
+  UserPinCodeReset: [];
 
   WebsocketConnect: [];
+
+  WorkflowCreate: [WorkflowResponseDto];
+  WorkflowDelete: [WorkflowResponseDto];
+  WorkflowUpdate: [WorkflowResponseDto];
 };
 
 export const eventManager = new BaseEventManager<Events>();

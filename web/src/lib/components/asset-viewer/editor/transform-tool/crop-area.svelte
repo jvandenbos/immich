@@ -7,6 +7,7 @@
   import { Icon } from '@immich/ui';
   import { onMount } from 'svelte';
   import { t } from 'svelte-i18n';
+  import { eventManager } from '$lib/managers/event-manager.svelte';
 
   interface Props {
     asset: AssetResponseDto;
@@ -74,6 +75,8 @@
       alt={$getAltText(toTimelineAsset(asset))}
       class="h-full select-none transition-transform motion-reduce:transition-none"
       style:transform={imageTransform}
+      onload={() => eventManager.emit('TransitionToAssetViewerReady')}
+      onerror={() => eventManager.emit('TransitionToAssetViewerReady')}
     />
     <div
       class={[

@@ -18,6 +18,8 @@ const createDefaultZoomState = (): ZoomImageWheelState => ({
 export type Events = {
   Zoom: [];
   ZoomChange: [ZoomImageWheelState];
+  DirectTransform: [ZoomImageWheelState];
+  ZoomEnabled: [boolean];
   Copy: [];
 };
 
@@ -85,6 +87,15 @@ export class AssetViewerManager extends BaseEventManager<Events> {
   onZoomChange(state: ZoomImageWheelState) {
     // bypass event emitter to avoid loop
     this.#zoomState = state;
+  }
+
+  directTransform(state: Partial<ZoomImageWheelState>) {
+    this.#zoomState = { ...this.#zoomState, ...state };
+    this.emit('DirectTransform', this.#zoomState);
+  }
+
+  setZoomEnabled(enabled: boolean) {
+    this.emit('ZoomEnabled', enabled);
   }
 
   cancelZoomAnimation() {

@@ -148,7 +148,7 @@ test.describe('zoom and face editor interaction', () => {
     await page.mouse.move(width / 2, height / 2);
     await page.mouse.wheel(0, -1);
 
-    const imgLocator = page.locator('[data-viewer-content] img[draggable="false"]');
+    const imgLocator = page.getByTestId('preview');
     await expect(async () => {
       const transform = await imgLocator.evaluate((element) => {
         return getComputedStyle(element.closest('[style*="transform"]') ?? element).transform;

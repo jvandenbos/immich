@@ -444,6 +444,8 @@
       !assetViewerManager.isShowEditor,
   );
 
+  const hasSidePanel = $derived(showDetailPanel || assetViewerManager.isShowEditor);
+
   const onSwipe = (event: SwipeCustomEvent) => {
     if (assetViewerManager.zoom > 1) {
       return;
@@ -470,7 +472,7 @@
 
 <section
   id="immich-asset-viewer"
-  class="fixed start-0 top-0 grid size-full grid-cols-4 grid-rows-[64px_1fr] overflow-hidden bg-black touch-none"
+  class="fixed start-0 top-0 grid size-full grid-cols-4 grid-rows-[64px_1fr] portrait:grid-rows-[64px_1fr_auto] overflow-hidden bg-black touch-none"
   use:focusTrap
   bind:this={assetViewerHtmlElement}
 >
@@ -508,13 +510,21 @@
   {/if}
 
   {#if $slideshowState === SlideshowState.None && showNavigation && !assetViewerManager.isShowEditor && !isFaceEditMode.value && previousAsset}
-    <div class="my-auto col-span-1 col-start-1 row-span-full row-start-1 justify-self-start">
+    <div
+      class={[
+        'my-auto col-span-1 col-start-1 row-span-full row-start-1 justify-self-start',
+        hasSidePanel && 'portrait:row-[1/3]',
+      ]}
+    >
       <PreviousAssetAction onPreviousAsset={() => navigateAsset('previous')} />
     </div>
   {/if}
 
   <!-- Asset Viewer -->
-  <div data-viewer-content class="z-[-1] relative col-start-1 col-span-4 row-start-1 row-span-full">
+  <div
+    data-viewer-content
+    class={['z-[-1] relative col-start-1 col-span-4 row-span-full', hasSidePanel && 'portrait:row-[1/3]']}
+  >
     {#if viewerKind === 'StackVideoViewer'}
       <VideoViewer
         asset={previewStackedAsset!}
@@ -578,10 +588,56 @@
         <OcrButton />
       </div>
     {/if}
+
+    {#if stack && withStacked && !assetViewerManager.isShowEditor}
+      {@const stackedAssets = stack.assets}
+      <div
+        id="stack-slideshow"
+        class="absolute bottom-0 max-w-[calc(100%-5rem)] col-span-4 col-start-1 pointer-events-none"
+      >
+        <div
+          role="presentation"
+          class="relative inline-flex flex-row flex-nowrap max-w-full overflow-x-auto overflow-y-hidden horizontal-scrollbar pointer-events-auto"
+          onmouseleave={() => (previewStackedAsset = undefined)}
+        >
+          {#each stackedAssets as stackedAsset (stackedAsset.id)}
+            <div
+              class={['inline-block px-1 relative transition-all pb-2']}
+              style:bottom={stackedAsset.id === asset.id ? '0' : '-10px'}
+            >
+              <Thumbnail
+                imageClass={{ 'border-2 border-white': stackedAsset.id === asset.id }}
+                brokenAssetClass="text-xs"
+                dimmed={stackedAsset.id !== asset.id}
+                asset={toTimelineAsset(stackedAsset)}
+                onClick={() => {
+                  cursor.current = stackedAsset;
+                  previewStackedAsset = undefined;
+                }}
+                onMouseEvent={({ isMouseOver }) => handleStackedAssetMouseEvent(isMouseOver, stackedAsset)}
+                readonly
+                thumbnailSize={stackedAsset.id === asset.id ? stackSelectedThumbnailSize : stackThumbnailSize}
+                showStackedIcon={false}
+                disableLinkMouseOver
+              />
+
+              <div class="w-full flex place-items-center place-content-center">
+                <div class={['w-2 h-2 rounded-full flex mt-0.5', { 'bg-white': stackedAsset.id === asset.id }]}></div>
+              </div>
+            </div>
+          {/each}
+        </div>
+      </div>
+    {/if}
   </div>
 
   {#if $slideshowState === SlideshowState.None && showNavigation && !assetViewerManager.isShowEditor && !isFaceEditMode.value && nextAsset}
-    <div class="my-auto col-span-1 col-start-4 row-span-full row-start-1 justify-self-end">
+    <div
+      class={[
+        'my-auto col-span-1 col-start-4 row-span-full row-start-1 justify-self-end',
+        hasSidePanel && 'portrait:row-[1/3]',
+      ]}
+    >
       <NextAssetAction onNextAsset={() => navigateAsset('next')} />
     </div>
   {/if}
@@ -590,54 +646,20 @@
     <div
       transition:fly={{ duration: 150 }}
       id="detail-panel"
-      class="row-start-1 row-span-4 overflow-y-auto transition-all dark:border-l dark:border-s-immich-dark-gray bg-light"
+      class="overflow-y-auto transition-all bg-light
+        landscape:row-start-1 landscape:row-span-4 landscape:dark:border-l landscape:dark:border-s-immich-dark-gray
+        portrait:col-span-full portrait:row-start-3 portrait:max-h-[40dvh] portrait:dark:border-t portrait:dark:border-t-immich-dark-gray"
       translate="yes"
     >
       {#if showDetailPanel}
-        <div class="w-90 h-full">
+        <div class="relative portrait:w-full landscape:w-[min(22.5rem,30vw)] landscape:min-w-56 h-full">
           <DetailPanel {asset} currentAlbum={album} />
         </div>
       {:else if assetViewerManager.isShowEditor}
-        <div class="w-100 h-full">
+        <div class="landscape:w-[min(25rem,30vw)] landscape:min-w-56 h-full">
           <EditorPanel {asset} onClose={closeEditor} />
         </div>
       {/if}
-    </div>
-  {/if}
-
-  {#if stack && withStacked && !assetViewerManager.isShowEditor}
-    {@const stackedAssets = stack.assets}
-    <div id="stack-slideshow" class="absolute bottom-0 w-full col-span-4 col-start-1 pointer-events-none">
-      <div class="relative flex flex-row no-wrap overflow-x-auto overflow-y-hidden horizontal-scrollbar">
-        {#each stackedAssets as stackedAsset (stackedAsset.id)}
-          <div
-            class={['inline-block px-1 relative transition-all pb-2 pointer-events-auto']}
-            style:bottom={stackedAsset.id === asset.id ? '0' : '-10px'}
-          >
-            <Thumbnail
-              imageClass={{ 'border-2 border-white': stackedAsset.id === asset.id }}
-              brokenAssetClass="text-xs"
-              dimmed={stackedAsset.id !== asset.id}
-              asset={toTimelineAsset(stackedAsset)}
-              onClick={() => {
-                cursor.current = stackedAsset;
-                previewStackedAsset = undefined;
-              }}
-              onMouseEvent={({ isMouseOver }) => handleStackedAssetMouseEvent(isMouseOver, stackedAsset)}
-              readonly
-              thumbnailSize={stackedAsset.id === asset.id ? stackSelectedThumbnailSize : stackThumbnailSize}
-              showStackedIcon={false}
-              disableLinkMouseOver
-            />
-
-            {#if stackedAsset.id === asset.id}
-              <div class="w-full flex place-items-center place-content-center">
-                <div class="w-2 h-2 bg-white rounded-full flex mt-0.5"></div>
-              </div>
-            {/if}
-          </div>
-        {/each}
-      </div>
     </div>
   {/if}
 

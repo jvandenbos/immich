@@ -190,7 +190,7 @@
 
 <section
   transition:fly={{ x: 360, duration: 100, easing: linear }}
-  class="absolute top-0 h-full w-90 overflow-x-hidden p-2 dark:text-immich-dark-fg bg-light"
+  class="absolute top-0 h-full w-full overflow-x-hidden p-2 dark:text-immich-dark-fg bg-light"
 >
   <div class="flex place-items-center justify-between gap-2">
     <div class="flex items-center gap-2">

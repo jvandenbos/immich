@@ -337,7 +337,7 @@
         </div>
 
         {#if isOwner}
-          <div class="p-1">
+          <div class="shrink-0 p-1">
             <Icon icon={mdiPencil} size="20" />
           </div>
         {/if}
@@ -349,20 +349,21 @@
             <Icon icon={mdiCalendar} size="24" />
           </div>
         </div>
-        <div class="p-1">
+        <div class="shrink-0 p-1">
           <Icon icon={mdiPencil} size="20" />
         </div>
       </div>
     {/if}
 
     <div class="flex gap-4 py-4">
-      <div><Icon icon={mdiImageOutline} size="24" /></div>
+      <div class="shrink-0"><Icon icon={mdiImageOutline} size="24" /></div>
 
       <div>
         <p class="break-all flex place-items-center gap-2 whitespace-pre-wrap">
           {asset.originalFileName}
           {#if isOwner}
             <IconButton
+              class="shrink-0"
               icon={mdiInformationOutline}
               aria-label={$t('show_file_location')}
               size="small"
@@ -402,7 +403,7 @@
 
     {#if asset.exifInfo?.make || asset.exifInfo?.model || asset.exifInfo?.exposureTime || asset.exifInfo?.iso}
       <div class="flex gap-4 py-4">
-        <div><Icon icon={mdiCamera} size="24" /></div>
+        <div class="shrink-0"><Icon icon={mdiCamera} size="24" /></div>
 
         <div>
           {#if asset.exifInfo?.make || asset.exifInfo?.model}
@@ -436,7 +437,7 @@
 
     {#if asset.exifInfo?.lensModel || asset.exifInfo?.fNumber || asset.exifInfo?.focalLength}
       <div class="flex gap-4 py-4">
-        <div><Icon icon={mdiCameraIris} size="24" /></div>
+        <div class="shrink-0"><Icon icon={mdiCameraIris} size="24" /></div>
 
         <div>
           {#if asset.exifInfo?.lensModel}

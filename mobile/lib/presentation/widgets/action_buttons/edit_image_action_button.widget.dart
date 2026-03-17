@@ -38,11 +38,11 @@ class EditImageActionButton extends ConsumerWidget {
         await ref.read(actionProvider.notifier).applyEdits(ActionSource.viewer, edits);
         await completer;
 
-        ImmichToast.show(context: context, msg: 'asset_edit_success'.tr(), toastType: ToastType.success);
+        ImmichToast.show(context: context, msg: 'success'.tr(), toastType: ToastType.success);
 
         context.pop();
       } catch (e) {
-        ImmichToast.show(context: context, msg: 'asset_edit_failed'.tr(), toastType: ToastType.error);
+        ImmichToast.show(context: context, msg: 'error_title'.tr(), toastType: ToastType.error);
         return;
       }
     }

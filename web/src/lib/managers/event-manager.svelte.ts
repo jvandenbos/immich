@@ -81,6 +81,7 @@ export type Events = {
   TransitionToAssetViewerReady: [];
   TransitionToTimeline: [{ id: string }];
   TransitionToTimelineReady: [];
+  ViewTransitionOldSnapshotPending: [];
 
   UserAdminCreate: [UserAdminResponseDto];
   // soft deleted

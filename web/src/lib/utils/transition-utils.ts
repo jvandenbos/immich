@@ -62,6 +62,8 @@ export async function crossfadeViewerContent(updateFn: () => void | Promise<void
 
   removeCrossfadeOverlay();
 
+  eventManager.emit('ViewTransitionOldSnapshotPending');
+
   const clone = viewerContent.cloneNode(true) as HTMLElement;
   Object.assign(clone.style, {
     position: 'absolute',

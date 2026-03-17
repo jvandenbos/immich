@@ -21,6 +21,7 @@
     slideshowTransition,
     slideshowAutoplay,
     slideshowRepeat,
+    kenBurnsEffect,
     slideshowState,
   } = slideshowStore;
 
@@ -38,6 +39,7 @@
   let tempSlideshowTransition = $state($slideshowTransition);
   let tempSlideshowAutoplay = $state($slideshowAutoplay);
   let tempSlideshowRepeat = $state($slideshowRepeat);
+  let tempKenBurnsEffect = $state($kenBurnsEffect);
 
   const navigationOptions: Record<SlideshowNavigation, RenderedOption> = {
     [SlideshowNavigation.Shuffle]: { icon: mdiShuffle, title: $t('shuffle') },
@@ -70,6 +72,7 @@
     $slideshowTransition = tempSlideshowTransition;
     $slideshowAutoplay = tempSlideshowAutoplay;
     $slideshowRepeat = tempSlideshowRepeat;
+    $kenBurnsEffect = tempKenBurnsEffect;
     $slideshowState = SlideshowState.PlaySlideshow;
     onClose();
   };
@@ -105,6 +108,10 @@
 
     <Field label={$t('show_slideshow_transition')}>
       <Switch bind:checked={tempSlideshowTransition} />
+    </Field>
+
+    <Field label={$t('slideshow_ken_burns_effect')}>
+      <Switch bind:checked={tempKenBurnsEffect} />
     </Field>
 
     <Field label={$t('slideshow_repeat')} description={$t('slideshow_repeat_description')}>

@@ -20,6 +20,7 @@
   import { editManager, EditToolType } from '$lib/managers/edit/edit-manager.svelte';
   import { eventManager } from '$lib/managers/event-manager.svelte';
   import { viewTransitionManager } from '$lib/managers/ViewTransitionManager.svelte';
+  import { crossfadeViewerContent, removeCrossfadeOverlay } from '$lib/utils/transition-utils';
   import { getAssetActions } from '$lib/services/asset.service';
   import { assetViewingStore } from '$lib/stores/asset-viewing.store';
   import { isFaceEditMode } from '$lib/stores/face-edit.svelte';
@@ -34,7 +35,6 @@
   import { InvocationTracker } from '$lib/utils/invocationTracker';
   import { SlideshowHistory } from '$lib/utils/slideshow-history';
   import { toTimelineAsset } from '$lib/utils/timeline-util';
-  import { crossfadeViewerContent, removeCrossfadeOverlay } from '$lib/utils/transition-utils';
   import {
     AssetTypeEnum,
     getAssetInfo,
@@ -121,7 +121,6 @@
   let slideShowPlaying = $derived($slideshowState === SlideshowState.PlaySlideshow);
   let slideShowAscending = $derived($slideshowNavigation === SlideshowNavigation.AscendingOrder);
   let slideShowShuffle = $derived($slideshowNavigation === SlideshowNavigation.Shuffle);
-
   let playOriginalVideo = $state($alwaysLoadOriginalVideo);
   let slideshowStartAssetId = $state<string>();
 
@@ -301,8 +300,19 @@
 
     const targetAsset = order === 'previous' ? previousAsset : nextAsset;
     const slideshowAllowsTransition = !slideShowPlaying || $slideshowTransition;
-    const useTransition = canTransition && slideshowAllowsTransition && (slideShowShuffle || !!targetAsset);
-    const hasNext = useTransition ? await startTransition(types, targetTransition, navigate) : await navigate();
+    const useTransition = slideshowAllowsTransition && (slideShowShuffle || !!targetAsset);
+
+    let hasNext: boolean;
+    if (slideShowPlaying && useTransition) {
+      hasNext = false;
+      await crossfadeViewerContent(async () => {
+        hasNext = await navigate();
+      }, 1000);
+    } else if (canTransition && useTransition) {
+      hasNext = await startTransition(types, targetTransition, navigate);
+    } else {
+      hasNext = await navigate();
+    }
 
     if (!slideShowPlaying) {
       return;

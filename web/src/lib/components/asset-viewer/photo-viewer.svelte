@@ -9,6 +9,7 @@
   import { assetViewerManager } from '$lib/managers/asset-viewer-manager.svelte';
   import { castManager } from '$lib/managers/cast-manager.svelte';
   import { eventManager } from '$lib/managers/event-manager.svelte';
+  import { viewTransitionManager } from '$lib/managers/ViewTransitionManager.svelte';
   import { isFaceEditMode } from '$lib/stores/face-edit.svelte';
   import { ocrManager } from '$lib/stores/ocr.svelte';
   import { boundingBoxesArray, type Faces } from '$lib/stores/people.store';
@@ -17,11 +18,12 @@
   import { canCopyImageToClipboard, copyImageToClipboard } from '$lib/utils/asset-utils';
   import { scaleToCover, scaleToFit, type Size } from '$lib/utils/container-utils';
   import { handleError } from '$lib/utils/handle-error';
+  import { KenBurnsAnimation } from '$lib/utils/ken-burns';
   import { getOcrBoundingBoxes } from '$lib/utils/ocr-utils';
   import { getBoundingBox } from '$lib/utils/people-utils';
   import { type SharedLinkResponseDto } from '@immich/sdk';
   import { toastManager } from '@immich/ui';
-  import { onDestroy, untrack } from 'svelte';
+  import { onDestroy, onMount, untrack } from 'svelte';
   import { useSwipe, type SwipeCustomEvent } from 'svelte-gestures';
   import { t } from 'svelte-i18n';
   import type { AssetCursor } from './asset-viewer.svelte';
@@ -46,13 +48,17 @@
     onSwipe,
   }: Props = $props();
 
-  const { slideshowState, slideshowLook } = slideshowStore;
-  const objectFit = $derived(
-    $slideshowState !== SlideshowState.None && $slideshowLook === SlideshowLook.Cover ? 'cover' : 'contain',
-  );
+  const { slideshowState, slideshowLook, kenBurnsEffect, slideshowDelay } = slideshowStore;
   const asset = $derived(cursor.current);
 
   let visibleImageReady: boolean = $state(false);
+  const kenBurns = new KenBurnsAnimation();
+  let adaptiveImage = $state<HTMLDivElement | undefined>();
+  onMount(() =>
+    eventManager.on({
+      ViewTransitionOldSnapshotPending: () => kenBurns.freeze(),
+    }),
+  );
 
   let previousAssetId: string | undefined;
   $effect.pre(() => {
@@ -62,13 +68,16 @@
     }
     previousAssetId = id;
     untrack(() => {
+      kenBurns.cancel();
       assetViewerManager.resetZoomState();
       visibleImageReady = false;
       $boundingBoxesArray = [];
+      adaptiveImage?.style.removeProperty('transform');
     });
   });
 
   onDestroy(() => {
+    kenBurns.cancel();
     $boundingBoxesArray = [];
   });
 
@@ -80,6 +89,8 @@
     height: containerHeight,
   });
 
+  const isCoverMode = $derived($slideshowState !== SlideshowState.None && $slideshowLook === SlideshowLook.Cover);
+
   const overlaySize = $derived.by((): Size => {
     if (!visibleImageReady) {
       return { width: 0, height: 0 };
@@ -87,7 +98,7 @@
 
     const assetWidth = asset.width && asset.width > 0 ? asset.width : 1;
     const assetHeight = asset.height && asset.height > 0 ? asset.height : 1;
-    const scaleFn = objectFit === 'cover' ? scaleToCover : scaleToFit;
+    const scaleFn = isCoverMode ? scaleToCover : scaleToFit;
     return scaleFn({ width: assetWidth, height: assetHeight }, { width: containerWidth, height: containerHeight });
   });
 
@@ -153,8 +164,6 @@
     $slideshowState !== SlideshowState.None && $slideshowLook === SlideshowLook.BlurredBackground && !!asset.thumbhash,
   );
 
-  let adaptiveImage = $state<HTMLDivElement | undefined>();
-
   const faceToNameMap = $derived.by(() => {
     // eslint-disable-next-line svelte/prefer-svelte-reactivity
     const map = new Map<Faces, string>();
@@ -175,6 +184,47 @@
   const faces = $derived(Array.from(faceToNameMap.keys()));
   const boundingBoxes = $derived(getBoundingBox(faces, overlaySize));
   const activeBoundingBoxes = $derived(boundingBoxes.filter((box) => $boundingBoxesArray.some((f) => f.id === box.id)));
+
+  const unassignedFaces = $derived((asset.unassignedFaces ?? []) as Faces[]);
+
+  const kenBurnsActive = $derived($slideshowState === SlideshowState.PlaySlideshow && $kenBurnsEffect);
+
+  $effect(() => {
+    if (!kenBurnsActive || !visibleImageReady || !adaptiveImage || !assetViewerManager.imgRef) {
+      return;
+    }
+
+    assetViewerManager.zoomState = { ...untrack(() => assetViewerManager.zoomState), enable: false };
+
+    void kenBurns.startWithSmartCrop(adaptiveImage, {
+      imgRef: assetViewerManager.imgRef,
+      faces,
+      fallbackFaces: unassignedFaces,
+      contentWidth: overlaySize.width,
+      contentHeight: overlaySize.height,
+      containerWidth,
+      containerHeight,
+      slideshowLook: $slideshowLook,
+      isCoverMode,
+      slideshowDelay: $slideshowDelay,
+      assetId: asset.id,
+    });
+
+    return () => {
+      kenBurns.cancel();
+      if (viewTransitionManager.activeViewTransition === null) {
+        assetViewerManager.resetZoomState();
+      }
+    };
+  });
+
+  $effect(() => {
+    if (viewTransitionManager.activeViewTransition === null) {
+      kenBurns.resume();
+    } else {
+      kenBurns.pause();
+    }
+  });
 </script>
 
 <AssetViewerEvents {onCopy} {onZoom} />
@@ -202,7 +252,7 @@
     {asset}
     {sharedLink}
     {container}
-    {objectFit}
+    objectFit={isCoverMode ? 'cover' : 'contain'}
     {onUrlChange}
     onImageReady={() => {
       visibleImageReady = true;

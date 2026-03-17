@@ -5,6 +5,7 @@ import { normalizeTransformEdits } from '$lib/utils/editor';
 import { handleError } from '$lib/utils/handle-error';
 import { AssetEditAction, AssetMediaSize, MirrorAxis, type AssetResponseDto, type CropParameters } from '@immich/sdk';
 import { clamp } from 'lodash-es';
+import smartcrop from 'smartcrop';
 import { tick } from 'svelte';
 
 export type CropAspectRatio =
@@ -56,10 +57,12 @@ class TransformManager implements EditToolManager {
 
   isInteracting = $state(false);
   isDragging = $state(false);
+  isApplyingSmartCrop = $state(false);
   animationFrame = $state<ReturnType<typeof requestAnimationFrame> | null>(null);
   dragAnchor = $state({ x: 0, y: 0 });
   resizeSide = $state(ResizeBoundary.None);
   imgElement = $state<HTMLImageElement | null>(null);
+  asset = $state<AssetResponseDto | null>(null);
   cropAreaEl = $state<HTMLElement | null>(null);
   overlayEl = $state<HTMLElement | null>(null);
   cropFrame = $state<HTMLElement | null>(null);
@@ -185,6 +188,7 @@ class TransformManager implements EditToolManager {
   }
 
   async onActivate(asset: AssetResponseDto, edits: EditActions): Promise<void> {
+    this.asset = asset;
     const originalSize = getDimensions(asset.exifInfo!);
     this.originalImageSize = { width: originalSize.width ?? 0, height: originalSize.height ?? 0 };
 
@@ -243,6 +247,7 @@ class TransformManager implements EditToolManager {
     this.cropImageScale = 1;
     this.cropAspectRatio = 'free';
     this.hasChanges = false;
+    this.asset = null;
   }
 
   mirror(axis: 'horizontal' | 'vertical') {
@@ -817,6 +822,67 @@ class TransformManager implements EditToolManager {
     };
 
     this.draw();
+  }
+
+  async applySmartCrop() {
+    const img = this.imgElement;
+    if (!img || !this.cropAreaEl || !this.asset) {
+      return;
+    }
+
+    this.isApplyingSmartCrop = true;
+    try {
+      const allFaces = [
+        ...(this.asset.people?.flatMap((person) => person.faces ?? []) ?? []),
+        ...(this.asset.unassignedFaces ?? []),
+      ];
+
+      const boosts =
+        allFaces.length > 0
+          ? allFaces.map((face) => ({
+              x: (face.boundingBoxX1 / face.imageWidth) * img.naturalWidth,
+              y: (face.boundingBoxY1 / face.imageHeight) * img.naturalHeight,
+              width: ((face.boundingBoxX2 - face.boundingBoxX1) / face.imageWidth) * img.naturalWidth,
+              height: ((face.boundingBoxY2 - face.boundingBoxY1) / face.imageHeight) * img.naturalHeight,
+              weight: 1,
+            }))
+          : undefined;
+
+      let requestWidth: number;
+      let requestHeight: number;
+      if (this.cropAspectRatio === 'free') {
+        requestWidth = Math.round(this.region.width / this.cropImageScale);
+        requestHeight = Math.round(this.region.height / this.cropImageScale);
+      } else {
+        const [aspectW, aspectH] = this.cropAspectRatio.split(':').map(Number);
+        const fitScale = Math.min(img.naturalWidth / aspectW, img.naturalHeight / aspectH);
+        requestWidth = Math.round(aspectW * fitScale);
+        requestHeight = Math.round(aspectH * fitScale);
+      }
+
+      const result = await smartcrop.crop(img, {
+        width: requestWidth,
+        height: requestHeight,
+        ...(boosts && { boost: boosts }),
+      });
+
+      const { x, y, width, height } = result.topCrop;
+      const displayRegion = {
+        x: x * this.cropImageScale,
+        y: y * this.cropImageScale,
+        width: width * this.cropImageScale,
+        height: height * this.cropImageScale,
+      };
+
+      this.hasChanges = true;
+      this.region.x = displayRegion.x;
+      this.region.y = displayRegion.y;
+      this.region.width = displayRegion.width;
+      this.region.height = displayRegion.height;
+      this.draw();
+    } finally {
+      this.isApplyingSmartCrop = false;
+    }
   }
 
   resetCrop() {

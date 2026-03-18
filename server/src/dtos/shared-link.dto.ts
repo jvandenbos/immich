@@ -99,17 +99,6 @@ export class SharedLinkLoginDto {
   password!: string;
 }
 
-export class SharedLinkPasswordDto {
-  @ApiPropertyOptional({ example: 'password', description: 'Link password' })
-  @IsString()
-  @Optional()
-  password?: string;
-
-  @ApiPropertyOptional({ description: 'Access token' })
-  @IsString()
-  @Optional()
-  token?: string;
-}
 export class SharedLinkResponseDto {
   @ApiProperty({ description: 'Shared link ID' })
   id!: string;

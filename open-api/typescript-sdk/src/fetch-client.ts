@@ -5926,20 +5926,16 @@ export function sharedLinkLogin({ key, slug, sharedLinkLoginDto }: {
 /**
  * Retrieve current shared link
  */
-export function getMySharedLink({ key, password, slug, token }: {
+export function getMySharedLink({ key, slug }: {
     key?: string;
-    password?: string;
     slug?: string;
-    token?: string;
 }, opts?: Oazapfts.RequestOpts) {
     return oazapfts.ok(oazapfts.fetchJson<{
         status: 200;
         data: SharedLinkResponseDto;
     }>(`/shared-links/me${QS.query(QS.explode({
         key,
-        password,
-        slug,
-        token
+        slug
     }))}`, {
         ...opts
     }));

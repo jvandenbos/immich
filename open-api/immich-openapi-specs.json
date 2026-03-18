@@ -11342,28 +11342,9 @@
             }
           },
           {
-            "name": "password",
-            "required": false,
-            "in": "query",
-            "description": "Link password",
-            "schema": {
-              "example": "password",
-              "type": "string"
-            }
-          },
-          {
             "name": "slug",
             "required": false,
             "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "token",
-            "required": false,
-            "in": "query",
-            "description": "Access token",
             "schema": {
               "type": "string"
             }

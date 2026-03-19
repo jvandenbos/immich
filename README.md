@@ -1,133 +1,50 @@
-<p align="center"> 
-  <br/>
-  <a href="https://opensource.org/license/agpl-v3"><img src="https://img.shields.io/badge/License-AGPL_v3-blue.svg?color=3F51B5&style=for-the-badge&label=License&logoColor=000000&labelColor=ececec" alt="License: AGPLv3"></a>
-  <a href="https://discord.immich.app">
-    <img src="https://img.shields.io/discord/979116623879368755.svg?label=Discord&logo=Discord&style=for-the-badge&logoColor=000000&labelColor=ececec" alt="Discord"/>
-  </a>
-  <br/>
-  <br/>
-</p>
+# Immich — Stability Patches
 
-<p align="center">
-<img src="design/immich-logo-stacked-light.svg" width="300" title="Login With Custom URL">
-</p>
-<h3 align="center">High performance self-hosted photo and video management solution</h3>
-<br/>
-<a href="https://immich.app">
-<img src="design/immich-screenshots.png" title="Main Screenshot">
-</a>
-<br/>
+> **This is an unofficial patched fork of [Immich](https://github.com/immich-app/immich).** It is not maintained, supported, or endorsed by the Immich project. For installation, configuration, documentation, and support, go to the official repo.
 
-<p align="center">
-  <a href="readme_i18n/README_ca_ES.md">Català</a>
-  <a href="readme_i18n/README_es_ES.md">Español</a>
-  <a href="readme_i18n/README_fr_FR.md">Français</a>
-  <a href="readme_i18n/README_it_IT.md">Italiano</a>
-  <a href="readme_i18n/README_ja_JP.md">日本語</a>
-  <a href="readme_i18n/README_ko_KR.md">한국어</a>
-  <a href="readme_i18n/README_de_DE.md">Deutsch</a>
-  <a href="readme_i18n/README_nl_NL.md">Nederlands</a>
-  <a href="readme_i18n/README_tr_TR.md">Türkçe</a>
-  <a href="readme_i18n/README_zh_CN.md">简体中文</a>
-  <a href="readme_i18n/README_zh_TW.md">正體中文</a>
-  <a href="readme_i18n/README_uk_UA.md">Українська</a>
-  <a href="readme_i18n/README_ru_RU.md">Русский</a>
-  <a href="readme_i18n/README_pt_BR.md">Português Brasileiro</a>
-  <a href="readme_i18n/README_sv_SE.md">Svenska</a>
-  <a href="readme_i18n/README_ar_JO.md">العربية</a>
-  <a href="readme_i18n/README_vi_VN.md">Tiếng Việt</a>
-  <a href="readme_i18n/README_th_TH.md">ภาษาไทย</a>
-</p>
+**Image**: `ghcr.io/jvandenbos/immich-server:v2.5.6-patched`
 
+## What is this?
 
-> [!WARNING]
-> ⚠️ Always follow [3-2-1](https://www.backblaze.com/blog/the-3-2-1-backup-strategy/) backup plan for your precious photos and videos!
-> 
- 
+A minimal set of crash and data-loss fixes applied on top of Immich v2.5.6. These were discovered while importing a large Apple Photos library (~300k files) with corrupt EXIF metadata and edge-case configurations.
 
-> [!NOTE]
-> You can find the main documentation, including installation guides, at https://immich.app/.
+The official Immich server would crash-loop or silently lose data in these scenarios. These patches make it handle them gracefully instead.
 
-## Links
+## What's fixed?
 
-- [Documentation](https://docs.immich.app/)
-- [About](https://docs.immich.app/overview/introduction)
-- [Installation](https://docs.immich.app/install/requirements)
-- [Roadmap](https://immich.app/roadmap)
-- [Demo](#demo)
-- [Features](#features)
-- [Translations](https://docs.immich.app/developer/translations)
-- [Contributing](https://docs.immich.app/overview/support-the-project)
+1. **Corrupt EXIF dates crash the server** — Photos with impossible dates (year 35567, 207490, etc.) cause PostgreSQL to reject the insert with "time zone displacement out of range". The server crashes and restarts in a loop, retrying the same bad file forever. **Fix**: validate date years (1–9999) before insert, fall back to file dates.
 
-## Demo
+2. **Core plugin failure crashes server on boot** — If the WASM plugin manifest is missing or corrupt, the server refuses to start entirely. External plugins have error handling, but the core plugin path does not. **Fix**: wrap in try/catch, allow degraded startup.
 
-Access the demo [here](https://demo.immich.app). For the mobile app, you can use `https://demo.immich.app` for the `Server Endpoint URL`.
+3. **Buggy WASM plugins crash the worker** — Unsafe non-null assertions in plugin host functions mean a single bad plugin offset crashes the entire workflow worker. **Fix**: null checks with error logging.
 
-### Login credentials
+4. **Bad plugin filter output kills workflows** — `JSON.parse` on WASM filter results isn't wrapped in try/catch. Non-JSON output from a third-party plugin crashes the workflow silently. **Fix**: catch and log.
 
-| Email           | Password |
-| --------------- | -------- |
-| demo@immich.app | demo     |
+5. **Empty import paths deletes all library assets** — A library with no import paths configured causes the offline detection query to match *every* asset, marking the entire library as deleted. **Fix**: skip offline detection when import paths are empty.
 
-## Features
+## Usage
 
-| Features                                     | Mobile | Web |
-| :------------------------------------------- | ------ | --- |
-| Upload and view videos and photos            | Yes    | Yes |
-| Auto backup when the app is opened           | Yes    | N/A |
-| Prevent duplication of assets                | Yes    | Yes |
-| Selective album(s) for backup                | Yes    | N/A |
-| Download photos and videos to local device   | Yes    | Yes |
-| Multi-user support                           | Yes    | Yes |
-| Album and Shared albums                      | Yes    | Yes |
-| Scrubbable/draggable scrollbar               | Yes    | Yes |
-| Support raw formats                          | Yes    | Yes |
-| Metadata view (EXIF, map)                    | Yes    | Yes |
-| Search by metadata, objects, faces, and CLIP | Yes    | Yes |
-| Administrative functions (user management)   | No     | Yes |
-| Background backup                            | Yes    | N/A |
-| Virtual scroll                               | Yes    | Yes |
-| OAuth support                                | Yes    | Yes |
-| API Keys                                     | N/A    | Yes |
-| LivePhoto/MotionPhoto backup and playback    | Yes    | Yes |
-| Support 360 degree image display             | No     | Yes |
-| User-defined storage structure               | Yes    | Yes |
-| Public Sharing                               | Yes    | Yes |
-| Archive and Favorites                        | Yes    | Yes |
-| Global Map                                   | Yes    | Yes |
-| Partner Sharing                              | Yes    | Yes |
-| Facial recognition and clustering            | Yes    | Yes |
-| Memories (x years ago)                       | Yes    | Yes |
-| Offline support                              | Yes    | No  |
-| Read-only gallery                            | Yes    | Yes |
-| Stacked Photos                               | Yes    | Yes |
-| Tags                                         | No     | Yes |
-| Folder View                                  | Yes    | Yes |
+Replace the server image in your `docker-compose.yml`:
 
-## Translations
+```yaml
+# Before
+image: ghcr.io/immich-app/immich-server:${IMMICH_VERSION:-release}
 
-Read more about translations [here](https://docs.immich.app/developer/translations).
+# After
+image: ghcr.io/jvandenbos/immich-server:v2.5.6-patched
+```
 
-<a href="https://hosted.weblate.org/engage/immich/">
-<img src="https://hosted.weblate.org/widget/immich/immich/multi-auto.svg" alt="Translation status" />
-</a>
+Then: `docker compose pull && docker compose up -d`
 
-## Repository activity
+All other containers (postgres, redis, ML) remain unchanged.
 
-![Activities](https://repobeats.axiom.co/api/embed/9e86d9dc3ddd137161f2f6d2e758d7863b1789cb.svg "Repobeats analytics image")
+## Source & Diff
 
-## Star history
+- [Full diff against upstream](https://github.com/jvandenbos/immich/compare/main...janv/fix-stability-crashes) — 74 lines changed across 6 files
+- [Detailed changelog](./CHANGELOG.md)
 
-<a href="https://star-history.com/#immich-app/immich&type=date&legend=top-left">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=immich-app/immich&type=date&theme=dark" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=immich-app/immich&type=date" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=immich-app/immich&type=date" width="100%" />
- </picture>
-</a>
+## Status
 
-## Contributors
+**Unmaintained.** This fork exists to fix specific bugs encountered in production. It will not track upstream releases. If these fixes are merged upstream, this fork becomes unnecessary.
 
-<a href="https://github.com/immich-app/immich/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=immich-app/immich" width="100%"/>
-</a>
+If you're looking for the real Immich project: **https://github.com/immich-app/immich**

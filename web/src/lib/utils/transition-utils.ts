@@ -23,6 +23,27 @@ export function startViewerTransition(
   });
 }
 
+export function startMemoryTransition(
+  memoryId: string,
+  navigate: () => void,
+  setTransitionId: (id: string | null) => void,
+) {
+  void viewTransitionManager.startTransition({
+    types: ['memory'],
+    prepareOldSnapshot: () => {
+      setTransitionId(memoryId);
+    },
+    performUpdate: async () => {
+      setTransitionId(null);
+      const ready = eventManager.untilNext('TransitionToAssetViewerReady');
+      navigate();
+      await ready;
+      eventManager.emit('TransitionToAssetViewer');
+      await tick();
+    },
+  });
+}
+
 let activeOverlay: HTMLElement | undefined;
 
 export function removeCrossfadeOverlay() {

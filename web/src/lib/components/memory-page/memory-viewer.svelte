@@ -20,7 +20,9 @@
   import AssetSelectControlBar from '$lib/components/timeline/AssetSelectControlBar.svelte';
   import { QueryParameter } from '$lib/constants';
   import { authManager } from '$lib/managers/auth-manager.svelte';
+  import { eventManager } from '$lib/managers/event-manager.svelte';
   import type { TimelineAsset, Viewport } from '$lib/managers/timeline-manager/types';
+  import { viewTransitionManager } from '$lib/managers/ViewTransitionManager.svelte';
   import { Route } from '$lib/route';
   import { getAssetBulkActions } from '$lib/services/asset.service';
   import { AssetInteraction } from '$lib/stores/asset-interaction.svelte';
@@ -52,6 +54,7 @@
   } from '@mdi/js';
   import type { NavigationTarget, Page } from '@sveltejs/kit';
   import { DateTime } from 'luxon';
+  import { tick } from 'svelte';
   import { t } from 'svelte-i18n';
   import type { Attachment } from 'svelte/attachments';
   import { Tween } from 'svelte/motion';
@@ -64,6 +67,7 @@
   let paused = $state(false);
   let current = $state<MemoryAsset | undefined>(undefined);
   const currentAssetId = $derived(current?.asset.id);
+  const currentAssetDto = $derived(current ? current.memory.assets[current.assetIndex] : undefined);
   const currentMemoryAssetFull = $derived.by(async () =>
     currentAssetId ? await getAssetInfo({ ...authManager.params, id: currentAssetId }) : undefined,
   );
@@ -76,6 +80,9 @@
 
   let isSaved = $derived(current?.memory.isSaved);
   let viewerHeight = $state(0);
+  let transitionName = $state<string | undefined>('hero');
+  let previousPanelTransitionName = $state<string | undefined>(undefined);
+  let nextPanelTransitionName = $state<string | undefined>(undefined);
 
   const { isViewing } = assetViewingStore;
   const viewport: Viewport = $state({ width: 0, height: 0 });
@@ -112,11 +119,108 @@
     }
   };
 
-  const handleNextAsset = () => handleNavigate(current?.next?.asset);
-  const handlePreviousAsset = () => handleNavigate(current?.previous?.asset);
-  const handleNextMemory = () => handleNavigate(current?.nextMemory?.assets[0]);
-  const handlePreviousMemory = () => handleNavigate(current?.previousMemory?.assets[0]);
-  const handleEscape = async () => goto(Route.photos());
+  const navigateWithTransition = (direction: 'next' | 'previous', asset?: { id: string }) => {
+    if ($isViewing || !asset) {
+      return;
+    }
+
+    void viewTransitionManager.startTransition({
+      types: ['memory-nav'],
+      prepareOldSnapshot: () => {
+        transitionName = direction;
+      },
+      performUpdate: async () => {
+        await goto(asHref(asset));
+        await eventManager.untilNext('TransitionToAssetViewerReady');
+      },
+      prepareNewSnapshot: () => {
+        transitionName = direction;
+      },
+      onFinished: () => {
+        transitionName = undefined;
+      },
+    });
+  };
+
+  const handleNextAsset = () => {
+    const next = current?.next;
+    if (next && next.memory.id !== current?.memory.id) {
+      navigateToMemory('next', next.asset);
+    } else {
+      navigateWithTransition('next', next?.asset);
+    }
+  };
+  const handlePreviousAsset = () => {
+    const previous = current?.previous;
+    if (previous && previous.memory.id !== current?.memory.id) {
+      navigateToMemory('previous', previous.asset);
+    } else {
+      navigateWithTransition('previous', previous?.asset);
+    }
+  };
+  const navigateToMemory = (direction: 'next' | 'previous', asset?: { id: string }) => {
+    if ($isViewing || !asset) {
+      return;
+    }
+
+    const isNext = direction === 'next';
+
+    void viewTransitionManager.startTransition({
+      types: ['memory'],
+      prepareOldSnapshot: () => {
+        if (isNext) {
+          nextPanelTransitionName = 'hero';
+        } else {
+          previousPanelTransitionName = 'hero';
+        }
+        transitionName = 'hero-out';
+      },
+      performUpdate: async () => {
+        nextPanelTransitionName = undefined;
+        previousPanelTransitionName = undefined;
+        if (isNext) {
+          previousPanelTransitionName = 'hero-out';
+        } else {
+          nextPanelTransitionName = 'hero-out';
+        }
+        transitionName = 'hero';
+        await goto(asHref(asset));
+        await eventManager.untilNext('TransitionToAssetViewerReady');
+      },
+      onFinished: () => {
+        previousPanelTransitionName = undefined;
+        nextPanelTransitionName = undefined;
+        transitionName = undefined;
+      },
+    });
+  };
+
+  const handleNextMemory = () => navigateToMemory('next', current?.nextMemory?.assets[0]);
+  const handlePreviousMemory = () => navigateToMemory('previous', current?.previousMemory?.assets[0]);
+  const closeMemoryViewer = () => {
+    const memoryId = current?.memory.id;
+    void viewTransitionManager.startTransition({
+      types: ['memory'],
+      prepareOldSnapshot: () => {
+        transitionName = 'hero';
+      },
+      performUpdate: async () => {
+        transitionName = undefined;
+        await goto(Route.photos());
+        await tick();
+        if (memoryId) {
+          const card = document.querySelector<HTMLElement>(`[data-memory-id="${memoryId}"]`);
+          if (card) {
+            card.style.viewTransitionName = 'hero';
+            await tick();
+            requestAnimationFrame(() => (card.style.viewTransitionName = ''));
+          }
+        }
+      },
+    });
+  };
+
+  const handleEscape = () => closeMemoryViewer();
   const handleSelectAll = () =>
     assetInteraction.selectAssets(current?.memory.assets.map((a) => toTimelineAsset(a)) || []);
 
@@ -270,9 +374,15 @@
     playerInitialized = false;
   };
 
-  const resetAndPlay = () => {
+  const handleMemoryImageReady = () => {
+    if (transitionName) {
+      eventManager.emit('TransitionToAssetViewerReady');
+      requestAnimationFrame(() => {
+        transitionName = undefined;
+      });
+    }
     handlePromiseError(handleAction('resetAndPlay', 'reset'));
-    handlePromiseError(handleAction('resetAndPlay', 'play'));
+    // temporarily disabled for dev: handlePromiseError(handleAction('resetAndPlay', 'play'));
   };
 
   const initPlayer = () => {
@@ -285,7 +395,7 @@
       handlePromiseError(handleAction('initPlayer[AssetViewOpen]', 'pause'));
     } else if (isVideo) {
       // Image assets will start playing when the image is loaded. Only autostart video assets.
-      resetAndPlay();
+      handleMemoryImageReady();
     }
     playerInitialized = true;
   };
@@ -382,7 +492,7 @@
   bind:clientWidth={viewport.width}
 >
   {#if current}
-    <ControlAppBar onClose={() => goto(Route.photos())} forceDark multiRow>
+    <ControlAppBar onClose={closeMemoryViewer} forceDark multiRow>
       {#snippet leading()}
         {#if current}
           <p class="text-lg">
@@ -471,6 +581,7 @@
                 src={getAssetMediaUrl({ id: current.previousMemory.assets[0].id, size: AssetMediaSize.Preview })}
                 alt={$t('previous_memory')}
                 draggable="false"
+                style:view-transition-name={previousPanelTransitionName}
               />
             {:else}
               <enhanced:img
@@ -504,8 +615,20 @@
                   videoViewerMuted={$videoViewerMuted}
                   videoViewerVolume={$videoViewerVolume}
                 />
-              {:else}
-                <MemoryPhotoViewer asset={current.asset} onImageLoad={resetAndPlay} />
+              {:else if currentAssetDto}
+                <MemoryPhotoViewer
+                  asset={currentAssetDto}
+                  {transitionName}
+                  onImageLoad={handleMemoryImageReady}
+                  onError={() => {
+                    if (transitionName) {
+                      eventManager.emit('TransitionToAssetViewerReady');
+                      requestAnimationFrame(() => {
+                        transitionName = undefined;
+                      });
+                    }
+                  }}
+                />
               {/if}
             {/key}
 
@@ -624,6 +747,7 @@
                 src={getAssetMediaUrl({ id: current.nextMemory.assets[0].id, size: AssetMediaSize.Preview })}
                 alt={$t('next_memory')}
                 draggable="false"
+                style:view-transition-name={nextPanelTransitionName}
               />
             {:else}
               <enhanced:img

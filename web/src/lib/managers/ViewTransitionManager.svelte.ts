@@ -71,10 +71,12 @@ export class ViewTransitionManager {
     // Let animation run in the background — don't block the caller.
     // This allows skipTransitions() to abort mid-animation for rapid navigation.
     // eslint-disable-next-line tscompat/tscompat
-    void transition.finished.finally(() => {
-      this.#activeViewTransition = null;
-      onFinished?.();
-    });
+    void transition.finished
+      .catch(() => {})
+      .finally(() => {
+        this.#activeViewTransition = null;
+        onFinished?.();
+      });
 
     // Wait only until the DOM update completes (both snapshots captured),
     // not for the animation to finish.

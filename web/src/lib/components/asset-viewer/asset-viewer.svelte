@@ -159,11 +159,15 @@
   let letterboxTransitionName = $state<string | undefined>(undefined);
   let detailPanelTransitionName = $state<string | undefined>(undefined);
 
+  console.log('[AV] Created, transitionName:', transitionName);
+
   let unsubscribes: (() => void)[] = [];
   onMount(() => {
+    console.log('[AV] onMount, transitionName:', transitionName);
     syncAssetViewerOpenClass(true);
 
     const addInfoTransition = () => {
+      console.log('[AV] TransitionToAssetViewer received, setting hero');
       detailPanelTransitionName = 'info';
       transitionName = 'hero';
     };
@@ -226,6 +230,7 @@
   };
 
   const clearTransitionNames = () => {
+    console.log('[AV] clearTransitionNames');
     detailPanelTransitionName = undefined;
     transitionName = undefined;
     letterboxTransitionName = undefined;

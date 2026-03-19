@@ -325,6 +325,33 @@
     animation: none;
     align-content: center;
   }
+  html:active-view-transition-type(memory) {
+    &::view-transition-group(hero),
+    &::view-transition-group(hero-out) {
+      animation-duration: var(--vt-duration-hero);
+      animation-timing-function: cubic-bezier(0.2, 0, 0, 1);
+      overflow: hidden;
+      border-radius: 12px;
+    }
+    &::view-transition-old(hero),
+    &::view-transition-old(hero-out) {
+      animation: var(--vt-duration-hero) cubic-bezier(0.2, 0, 0, 1) fadeOut forwards;
+      object-fit: cover;
+    }
+    &::view-transition-new(hero),
+    &::view-transition-new(hero-out) {
+      animation: var(--vt-duration-hero) cubic-bezier(0.2, 0, 0, 1) fadeIn forwards;
+      object-fit: cover;
+    }
+  }
+
+  html:active-view-transition-type(memory-nav) {
+    &::view-transition-group(next),
+    &::view-transition-group(previous) {
+      overflow: hidden;
+    }
+  }
+
   ::view-transition-old(next),
   ::view-transition-old(next-old),
   ::view-transition-new(next),

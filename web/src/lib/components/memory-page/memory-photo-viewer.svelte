@@ -1,57 +1,48 @@
 <script lang="ts">
-  import { assetViewerFadeDuration } from '$lib/constants';
-  import type { TimelineAsset } from '$lib/managers/timeline-manager/types';
-  import { getAssetMediaUrl } from '$lib/utils';
-  import { getAltText } from '$lib/utils/thumbnail-util';
-  import { AssetMediaSize } from '@immich/sdk';
+  import AdaptiveImage from '$lib/components/AdaptiveImage.svelte';
+  import type { Size } from '$lib/utils/container-utils';
+  import type { AssetResponseDto } from '@immich/sdk';
   import DelayedLoadingSpinner from '$lib/components/DelayedLoadingSpinner.svelte';
-  import { onMount } from 'svelte';
-  import { fade } from 'svelte/transition';
 
   interface Props {
-    asset: TimelineAsset;
+    asset: AssetResponseDto;
+    transitionName?: string;
     onImageLoad: () => void;
+    onError?: () => void;
   }
 
-  const { asset, onImageLoad }: Props = $props();
+  const { asset, transitionName, onImageLoad, onError }: Props = $props();
 
-  let assetFileUrl: string = $state('');
-  let imageLoaded: boolean = $state(false);
-  let loader = $state<HTMLImageElement>();
+  let containerWidth = $state(0);
+  let containerHeight = $state(0);
 
-  const onLoadCallback = () => {
-    imageLoaded = true;
-    assetFileUrl = imageLoaderUrl;
-    onImageLoad();
-  };
+  const container: Size = $derived({ width: containerWidth, height: containerHeight });
 
-  onMount(() => {
-    if (loader?.complete) {
-      onLoadCallback();
-    }
-    loader?.addEventListener('load', onLoadCallback);
-    return () => {
-      loader?.removeEventListener('load', onLoadCallback);
-    };
-  });
-
-  const imageLoaderUrl = $derived(getAssetMediaUrl({ id: asset.id, size: AssetMediaSize.Preview }));
+  const isHero = $derived(transitionName === 'hero');
+  let imageReady = $state(false);
 </script>
 
-{#if !imageLoaded}
-  <!-- svelte-ignore a11y_missing_attribute -->
-  <img bind:this={loader} style="display:none" src={imageLoaderUrl} aria-hidden="true" />
-{/if}
-
-{#if !imageLoaded}
-  <DelayedLoadingSpinner />
-{:else if imageLoaded}
-  <div transition:fade={{ duration: assetViewerFadeDuration }} class="h-full w-full">
-    <img
-      class="h-full w-full rounded-2xl object-contain transition-all"
-      src={assetFileUrl}
-      alt={$getAltText(asset)}
-      draggable="false"
+<div
+  class="relative h-full w-full overflow-hidden rounded-2xl"
+  bind:clientWidth={containerWidth}
+  bind:clientHeight={containerHeight}
+  style:view-transition-name={!isHero ? transitionName : undefined}
+>
+  {#if containerWidth > 0 && containerHeight > 0}
+    <AdaptiveImage
+      {asset}
+      {container}
+      transitionName={isHero ? transitionName : undefined}
+      showLetterboxes={false}
+      onImageReady={() => {
+        imageReady = true;
+        onImageLoad();
+      }}
+      onError={() => {
+        onError?.();
+      }}
     />
-  </div>
-{/if}
+  {:else}
+    <DelayedLoadingSpinner />
+  {/if}
+</div>

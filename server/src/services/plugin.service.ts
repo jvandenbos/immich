@@ -79,10 +79,13 @@ export class PluginService extends BaseService {
     const { resourcePaths, plugins } = this.configRepository.getEnv();
     const coreManifestPath = `${resourcePaths.corePlugin}/manifest.json`;
 
-    const coreManifest = await this.readAndValidateManifest(coreManifestPath);
-    await this.loadPluginToDatabase(coreManifest, resourcePaths.corePlugin);
-
-    this.logger.log(`Successfully processed core plugin: ${coreManifest.name} (version ${coreManifest.version})`);
+    try {
+      const coreManifest = await this.readAndValidateManifest(coreManifestPath);
+      await this.loadPluginToDatabase(coreManifest, resourcePaths.corePlugin);
+      this.logger.log(`Successfully processed core plugin: ${coreManifest.name} (version ${coreManifest.version})`);
+    } catch (error) {
+      this.logger.error(`Failed to load core plugin from ${coreManifestPath}:`, error);
+    }
 
     // Load external plugins
     if (plugins.external.allow && plugins.external.installFolder) {
@@ -284,7 +287,13 @@ export class PluginService extends BaseService {
         return false;
       }
 
-      const result = JSON.parse(filterResult.text());
+      let result: { passed?: boolean };
+      try {
+        result = JSON.parse(filterResult.text());
+      } catch {
+        this.logger.error(`Filter ${filter.methodName} returned invalid JSON: ${filterResult.text()}`);
+        return false;
+      }
       if (result.passed === false) {
         this.logger.debug(`Filter ${filter.methodName} returned false, stopping workflow execution`);
         return false;

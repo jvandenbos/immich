@@ -273,7 +273,7 @@ describe(LibraryService.name, () => {
 
   describe('handleQueueSyncAssets', () => {
     it('should call the offline check', async () => {
-      const library = factory.library();
+      const library = factory.library({ importPaths: ['/photos'] });
 
       mocks.library.get.mockResolvedValue(library);
       mocks.storage.walk.mockImplementation(async function* generator() {});
@@ -290,8 +290,19 @@ describe(LibraryService.name, () => {
       );
     });
 
-    it('should skip an empty library', async () => {
+    it('should skip a library with no import paths', async () => {
       const library = factory.library();
+
+      mocks.library.get.mockResolvedValue(library);
+
+      const response = await sut.handleQueueSyncAssets({ id: library.id });
+
+      expect(response).toBe(JobStatus.Skipped);
+      expect(mocks.asset.detectOfflineExternalAssets).not.toHaveBeenCalled();
+    });
+
+    it('should skip an empty library', async () => {
+      const library = factory.library({ importPaths: ['/photos'] });
 
       mocks.library.get.mockResolvedValue(library);
       mocks.storage.walk.mockImplementation(async function* generator() {});

@@ -1396,6 +1396,26 @@ describe(MetadataService.name, () => {
       );
     });
 
+    it('should handle EXIF date with out-of-range year', async () => {
+      const asset = AssetFactory.create();
+      mocks.assetJob.getForMetadataExtraction.mockResolvedValue(getForMetadataExtraction(asset));
+      // Corrupt EXIF date with year 35567, which would crash PostgreSQL with
+      // "time zone displacement out of range" when serialized as "+035567-02-12T03:27:24.000Z"
+      mockReadTags({ DateTimeOriginal: '35567:02:12 03:27:24' });
+
+      await sut.handleMetadataExtraction({ id: asset.id });
+      // Should fall back to file dates instead of crashing
+      expect(mocks.asset.upsertExif).toHaveBeenCalledWith(
+        expect.objectContaining({
+          dateTimeOriginal: expect.any(Date),
+        }),
+        { lockedPropertiesBehavior: 'skip' },
+      );
+      // The date should be a valid date (from file stats fallback), not the corrupt EXIF date
+      const call = mocks.asset.upsertExif.mock.calls[0][0];
+      expect(call.dateTimeOriginal.getFullYear()).toBeLessThanOrEqual(9999);
+    });
+
     it('should handle invalid rating value', async () => {
       const asset = AssetFactory.create();
       mocks.assetJob.getForMetadataExtraction.mockResolvedValue(getForMetadataExtraction(asset));

@@ -42,7 +42,12 @@ export class PluginHostFunctions {
    * Reads the input from the plugin, parses it, and calls the actual update function.
    */
   private async handleUpdateAsset(cp: CurrentPlugin, offs: bigint) {
-    const input = JSON.parse(cp.read(offs)!.text());
+    const raw = cp.read(offs);
+    if (!raw) {
+      this.logger.error('handleUpdateAsset received null offset from WASM plugin');
+      return;
+    }
+    const input = JSON.parse(raw.text());
     await this.updateAsset(input);
   }
 
@@ -51,7 +56,12 @@ export class PluginHostFunctions {
    * Reads the input from the plugin, parses it, and calls the actual add function.
    */
   private async handleAddAssetToAlbum(cp: CurrentPlugin, offs: bigint) {
-    const input = JSON.parse(cp.read(offs)!.text());
+    const raw = cp.read(offs);
+    if (!raw) {
+      this.logger.error('handleAddAssetToAlbum received null offset from WASM plugin');
+      return;
+    }
+    const input = JSON.parse(raw.text());
     await this.addAssetToAlbum(input);
   }
 

@@ -48,3 +48,7 @@ All other containers (postgres, redis, ML) remain unchanged.
 **Unmaintained.** This fork exists to fix specific bugs encountered in production. It will not track upstream releases. If these fixes are merged upstream, this fork becomes unnecessary.
 
 If you're looking for the real Immich project: **https://github.com/immich-app/immich**
+
+## Credits
+
+All credit goes to [Alex Tran](https://github.com/alextran1502) and the [Immich contributors](https://github.com/immich-app/immich/graphs/contributors) for building an incredible self-hosted photo management solution. This fork wouldn't exist without their work.

@@ -124,47 +124,41 @@ Effort key: S = few hours, M = 1 day, L = 2+ days.
 
 ---
 
-## FEATURE: "Open in Lightroom" (and other external editors)
+## FEATURE: External editing — the elephant in the room
 
-### 16. Open original file in Lightroom from the asset viewer `[M]`
+### 16. Immich has no real photo editor and no way to hand off to one `[XL]`
 
-- **Problem**: Immich is view-only for editing workflows. If you want to edit a photo in Lightroom, you have to: download the original, find it in Downloads, import into Lightroom, edit, re-upload. For NAS users whose library is already on a local mount, this is absurd — the file is *right there*.
-- **What exists today**:
-  - `AssetResponseDto.originalPath` already exposes the server-side file path via the API
-  - The asset viewer has a clean action system (`web/src/lib/components/asset-viewer/actions/`) — adding a new action is straightforward
-  - Download endpoint: `GET /api/assets/{id}/original` streams the original file
-  - No external editor integration exists yet
+- **Problem**: Immich's built-in editor is crop/rotate only. No exposure, curves, local adjustments, HSL, noise reduction — nothing a photographer actually needs. And there's no way to open a photo in Lightroom/Darktable/GIMP from the web UI either.
+- **Why this is hard**: Every product that solved "open in desktop editor" ships a desktop companion. There is no web standard that lets a browser launch a native app with a file path. We researched this thoroughly:
 
-#### Approach: Configurable path mapping for NAS/local mounts
+#### What other products do
 
-For users whose Immich library lives on a NAS mounted locally (SMB/NFS), the original file is already accessible — Immich just doesn't know how to express the path in local terms.
+| Product | Solution |
+|---------|----------|
+| Google Photos | No external editor integration at all. Download manually. |
+| iCloud Photos | Native macOS/iOS app has the originals. Windows: iCloud for Windows syncs to a local folder. |
+| Synology Photos | Synology Drive Client syncs `/photo` locally. Edit there, changes sync back. |
+| Nextcloud | Desktop client registers `nc://` protocol. Web UI fires `nc://open/<path>`, client opens the file in the OS default app. |
 
-**Server side**:
-- Add admin config: `externalEditor.pathMapping` — maps server paths to client-accessible paths
-  - Example: `{ "/data/library": "smb://rafael/photos" }` or `{ "/data/library": "/Volumes/photos" }`
-- New API field on `AssetResponseDto`: `localPath?: string` — the mapped path, only populated if config is set
-- New endpoint: `GET /api/assets/{id}/open` — returns a redirect to the appropriate URI scheme
+#### What web standards offer (not much)
 
-**Client side**:
-- New action component: `open-in-editor-action.svelte` in the asset viewer actions directory
-- Uses `localPath` to construct a URI:
-  - **Lightroom Classic**: `file://` path — Lightroom opens files passed to it via OS "Open With"
-  - **Lightroom CC**: `lightroom://open?path=...` URI scheme (Adobe's registered protocol)
-  - **Generic**: Configurable URI template, e.g., `myapp://open?file={path}`
-- Falls back to downloading the original if no path mapping is configured
-- Menu item: "Open in..." with submenu for configured editors
+- **File System Access API** — Chromium-only. No Firefox, no Safari, no mobile.
+- **File Handling API** — Only routes files INTO your PWA, can't launch Lightroom.
+- **`registerProtocolHandler`** — Only `web+something` schemes pointing to web URLs, not native apps.
 
-**Files to modify**:
-- `server/src/dtos/asset-response.dto.ts` — add `localPath` field
-- `server/src/services/asset-media.service.ts` — populate `localPath` from config mapping
-- `web/src/lib/constants.ts` — add `OPEN_IN_EDITOR` to `AssetAction` enum
-- `web/src/lib/components/asset-viewer/actions/open-in-editor-action.svelte` — new component
-- `web/src/lib/components/asset-viewer/asset-viewer-nav-bar.svelte` — add to menu
-- Admin settings page — new "External Editors" section
+#### The real options
 
-**Why not just download?** Because for a 50MB RAW file on a NAS that's already mounted at `/Volumes/photos`, downloading through the browser is a waste of time and disk. The file is already local. Just point Lightroom at it.
+1. **Build an Immich Desktop companion** (Tauri — small, cross-platform, Rust) that authenticates with Immich, caches originals on demand, registers `immich://` protocol handler. Web UI's "Open in editor" fires `immich://open/asset/{id}`, desktop app opens the file with the OS default app for that type. This is the Nextcloud model and the only proven consumer-grade approach. **Effort: XL** — this is a separate project.
 
-**Risk**: Browser security restrictions on `file://` URLs opened from web pages. May need a small companion helper (bookmarklet, browser extension, or Tauri wrapper) to bridge the gap. The `lightroom://` protocol scheme works natively though.
+2. **Expose the library via WebDAV** (server-side only, no client install). User mounts it in Finder/Explorer, browses files, right-click → Open with Lightroom. Power-user mode — works but requires OS-level mount setup. **Effort: L.**
+
+3. **Build a real in-browser editor** using something like [filerobot-image-editor](https://github.com/scaleflex/filerobot-image-editor) or a custom solution. Exposure, curves, HSL, local adjustments — all in the browser. Non-destructive edits stored as a sidecar. This sidesteps the "launch desktop app" problem entirely by making the web UI good enough. **Effort: XL** — but it's the only approach that works without any install for 100% of users.
+
+#### Recommendation
+
+Option 3 (in-browser editor) is the only path that's truly consumer-grade with zero install. Option 1 (desktop companion) is the right long-term play for power users. Option 2 (WebDAV) is a quick win for NAS users who already know how to mount network drives.
+
+None of these are small. Parking this as a strategic gap, not a quick fix.
 
 ---
 
@@ -187,7 +181,7 @@ For users whose Immich library lives on a NAS mounted locally (SMB/NFS), the ori
 | 13 | Backup validation | T4 | S |
 | 14 | File watcher dedup | T4 | S |
 | 15 | Thumbnail retry | T4 | S |
-| 16 | Open in Lightroom/editor | Feature | M |
+| 16 | External editing (desktop companion or in-browser editor) | Feature | XL |
 
 **Total**: ~10-12 days focused work for everything. Tier 2 items 5-8 are the sweet spot — all `[S]`, all eliminate real data risks.
 
@@ -201,6 +195,6 @@ This isn't a roadmap — it's a risk register. Pick items based on what's actual
 - **Using remote ML server?** Prioritize #1 (ML timeouts) immediately.
 - **Large library (100k+ assets)?** Prioritize #11 (race conditions) and #12 (thumbnail health).
 - **Multiple users sharing albums?** Prioritize #6 (transactions) and #7 (optimistic deletes).
-- **Photographer with Lightroom workflow?** #16 (Open in editor) eliminates the download-import-edit-reupload loop.
+- **Photographer who needs real editing?** #16 is the strategic gap — no quick fix exists today.
 
 PRs for Tier 1 items should be submitted first. Each one is a standalone fix that doesn't depend on the others.

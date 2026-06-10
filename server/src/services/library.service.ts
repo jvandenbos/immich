@@ -705,6 +705,11 @@ export class LibraryService extends BaseService {
       return JobStatus.Skipped;
     }
 
+    if (library.importPaths.length === 0) {
+      this.logger.log(`Library ${library.id} has no import paths, skipping offline asset check`);
+      return JobStatus.Skipped;
+    }
+
     const assetCount = await this.assetRepository.getLibraryAssetCount(job.id);
     if (!assetCount) {
       this.logger.log(`Library ${library.id} is empty, no need to check assets`);

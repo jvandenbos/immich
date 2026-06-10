@@ -937,6 +937,16 @@ export class MetadataService extends BaseService {
 
     let dateTimeOriginal = dateTime?.toDateTime();
 
+    // reject dates with years outside PostgreSQL's supported range (1-9999)
+    // corrupt EXIF data can produce years like 35567 or 207490, which serialize as
+    // "+035567-02-12T03:27:24.000Z" and crash PostgreSQL with "time zone displacement out of range"
+    if (dateTimeOriginal && (dateTimeOriginal.year < 1 || dateTimeOriginal.year > 9999)) {
+      this.logger.warn(
+        `Invalid date year ${dateTimeOriginal.year} in EXIF data for asset ${asset.id}: ${asset.originalPath}, ignoring`,
+      );
+      dateTimeOriginal = undefined;
+    }
+
     // do not let JavaScript use local timezone
     if (dateTimeOriginal && !dateTime?.hasZone) {
       dateTimeOriginal = dateTimeOriginal.setZone('UTC', { keepLocalTime: true });

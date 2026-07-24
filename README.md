@@ -1,3 +1,44 @@
+# Immich — personal patched build
+
+> [!IMPORTANT]
+> **This is not my project.** This is a personal fork of [Immich](https://github.com/immich-app/immich)
+> carrying two small stability patches — nothing more. All credit for Immich, one of the best
+> self-hosted photo and video platforms in existence, belongs to the
+> [Immich team and its contributors](https://github.com/immich-app/immich/graphs/contributors).
+> Please use the official project: **[immich.app](https://immich.app)** ·
+> **[github.com/immich-app/immich](https://github.com/immich-app/immich)**.
+> **Do not report issues from this fork to the upstream project** — bugs seen here may be caused by
+> these patches and must not burden the Immich maintainers.
+
+## What this fork changes
+
+Based on the upstream release tagged **[`v3.0.3`](https://github.com/immich-app/immich/releases/tag/v3.0.3)**.
+Two commits are applied on top; the amd64 server image is published at
+`ghcr.io/jvandenbos/immich-server:v3.0.3-patched`.
+
+| # | Patch | Commit | What it does |
+|---|-------|--------|--------------|
+| P1 | Corrupt EXIF year crash guard | [`b8a4e07`](https://github.com/jvandenbos/immich/commit/b8a4e07) | Guards metadata extraction against photos whose EXIF year is out of range (>9999 or <1), which otherwise crashes Postgres with `time zone displacement out of range` and aborts the import. |
+| P2 | Empty import-paths data-loss guard | [`48f4ce8`](https://github.com/jvandenbos/immich/commit/48f4ce8) | Skips external-library offline detection when a library has zero import paths. Upstream v3.0.3 guards the crawl side of this, but not the offline-detection side, so a library with no import paths could soft-delete every external asset it owns. |
+
+Both patches are small, defensive guards intended to be upstreamed in spirit; they change no schema
+and no user-facing behavior beyond preventing the crashes above.
+
+The previous `v2.7.5-patched` tag of this fork carried **three additional plugin-subsystem patches**.
+Those are now **obsolete**: upstream v3 rewrote that subsystem with equivalent guards built in, so
+they are no longer needed. Kudos again to the Immich team for fixing it properly upstream.
+
+## License
+
+Immich is licensed **AGPL-3.0**. This fork keeps the upstream [`LICENSE`](LICENSE) untouched and
+inherits the same terms.
+
+---
+
+**Everything below is the upstream Immich README, preserved unchanged.**
+
+---
+
 <p align="center"> 
   <br/>
   <a href="https://opensource.org/license/agpl-v3"><img src="https://img.shields.io/badge/License-AGPL_v3-blue.svg?color=3F51B5&style=for-the-badge&label=License&logoColor=000000&labelColor=ececec" alt="License: AGPLv3"></a>
